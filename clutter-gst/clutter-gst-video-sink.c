@@ -213,6 +213,7 @@ struct _ClutterGstVideoSinkPrivate
 
   GMainContext            *clutter_main_context;
   ClutterGstSource        *source;
+  int                      priority;
 
   GSList                  *renderers;
   GstCaps                 *caps;
@@ -243,6 +244,7 @@ static GSourceFuncs gst_source_funcs;
 static ClutterGstSource *
 clutter_gst_source_new (ClutterGstVideoSink *sink)
 {
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
   GSource *source;
   ClutterGstSource *gst_source;
 
@@ -250,7 +252,7 @@ clutter_gst_source_new (ClutterGstVideoSink *sink)
   gst_source = (ClutterGstSource *) source;
 
   g_source_set_can_recurse (source, TRUE);
-  g_source_set_priority (source, CLUTTER_GST_DEFAULT_PRIORITY);
+  g_source_set_priority (source, priv->priority);
 
   gst_source->sink = sink;
   gst_source->buffer_lock = g_mutex_new ();
@@ -356,8 +358,9 @@ clutter_gst_video_sink_set_priority (ClutterGstVideoSink *sink,
   ClutterGstVideoSinkPrivate *priv = sink->priv;
 
   GST_INFO ("GSource priority: %d", priority);
-
-  g_source_set_priority ((GSource *) priv->source, priority);
+  priv->priority = priority;
+  if (priv->source)
+    g_source_set_priority ((GSource *) priv->source, priority);
 }
 
 /*
@@ -993,6 +996,7 @@ clutter_gst_video_sink_init (ClutterGstVideoSink      *sink,
   priv->renderer_state = CLUTTER_GST_RENDERER_STOPPED;
 
   priv->signal_handler_ids = g_array_new (FALSE, TRUE, sizeof (gulong));
+  priv->priority = CLUTTER_GST_DEFAULT_PRIORITY;
 }
 
 static GstFlowReturn
@@ -1244,7 +1248,7 @@ clutter_gst_video_sink_get_property (GObject *object,
       g_value_set_object (value, priv->texture);
       break;
     case PROP_UPDATE_PRIORITY:
-      g_value_set_int (value, g_source_get_priority ((GSource *) priv->source));
+      g_value_set_int (value, priv->priority);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
