@@ -33,6 +33,7 @@
 #define __CLUTTER_GST_UTIL_H__
 
 #include <clutter/clutter.h>
+#include <gst/gst.h>
 
 G_BEGIN_DECLS
 
@@ -44,6 +45,8 @@ ClutterInitError clutter_gst_init_with_args (int            *argc,
                                              GOptionEntry   *entries,
                                              const char     *translation_domain,
                                              GError        **error);
+GstElement *     clutter_gst_video_sink_new (ClutterTexture *texture) G_GNUC_DEPRECATED;
+
 
 G_END_DECLS
 

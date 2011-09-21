@@ -146,6 +146,17 @@ GST_MAJORMINOR=0.10
 pkg_modules="gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION gstreamer-plugins-base-$GST_MAJORMINOR gstreamer-base-$GST_MAJORMINOR gstreamer-interfaces-$GST_MAJORMINOR gstreamer-video-$GST_MAJORMINOR gstreamer-audio-$GST_MAJORMINOR gstreamer-tag-$GST_MAJORMINOR"
 PKG_CHECK_MODULES(GST, [$pkg_modules])
 
+dnl libs used by the plugin
+PKG_CHECK_MODULES([PLUGIN],
+                  [clutter-1.0 >= $CLUTTER_REQ_VERSION
+                   gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION
+                   gstreamer-base-$GST_MAJORMINOR
+                   gstreamer-interfaces-$GST_MAJORMINOR])
+
+dnl define location of gstreamer plugin directory
+plugindir="\$(libdir)/gstreamer-$GST_MAJORMINOR"
+AC_SUBST(plugindir)
+
 dnl ========================================================================
 dnl GL inclusion and link. We depend on GL for the single glGetIntegerv()
 dnl call. The end goal is to get rid of it, but we can't just yet.

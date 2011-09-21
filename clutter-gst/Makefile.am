@@ -25,7 +25,7 @@ source_h = 					\
 	$(srcdir)/clutter-gst-types.h		\
 	$(srcdir)/clutter-gst-util.h		\
 	$(srcdir)/clutter-gst-version.h		\
-	$(srcdir)/clutter-gst-video-sink.h 	\
+	$(srcdir)/clutter-gst-video-sink.h	\
 	$(srcdir)/clutter-gst-video-texture.h 	\
 	$(srcdir)/clutter-gst-player.h		\
 	$(NULL)
@@ -90,6 +90,27 @@ libclutter_gst_@CLUTTER_GST_MAJORMINOR@_la_LDFLAGS =	\
 
 cluttergstheadersdir = $(includedir)/clutter-@CLUTTER_API_VERSION@/clutter-gst
 cluttergstheaders_HEADERS = $(source_h) $(glib_enum_h)
+
+#
+# GStreamer plugin
+#
+
+plugin_source_c = 				\
+	$(srcdir)/clutter-gst-video-sink.c	\
+	$(NULL)
+
+libgstclutter_la_SOURCES =	\
+	$(plugin_source_c)      \
+	$(NULL)
+
+plugin_LTLIBRARIES = libgstclutter.la
+
+libgstclutter_la_LIBADD  = $(PLUGIN_LIBS)
+libgstclutter_la_LDFLAGS =	\
+	$(GL_LDFLAGS)		\
+	-module -avoid-version	\
+	-no-undefined		\
+	$(NULL)
 
 #
 # Introspection data

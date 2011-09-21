@@ -51,7 +51,7 @@
 #include "clutter-gst-marshal.h"
 #include "clutter-gst-player.h"
 #include "clutter-gst-private.h"
-#include "clutter-gst-video-sink.h"
+#include "clutter-gst-util.h"
 #include "clutter-gst-video-texture.h"
 
 struct _ClutterGstVideoTexturePrivate

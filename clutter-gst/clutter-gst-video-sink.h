@@ -100,7 +100,6 @@ struct _ClutterGstVideoSinkClass
 };
 
 GType       clutter_gst_video_sink_get_type    (void) G_GNUC_CONST;
-GstElement *clutter_gst_video_sink_new         (ClutterTexture *texture);
 
 G_END_DECLS
 
