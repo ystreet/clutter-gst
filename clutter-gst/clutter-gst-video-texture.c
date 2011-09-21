@@ -51,7 +51,6 @@
 #include "clutter-gst-marshal.h"
 #include "clutter-gst-player.h"
 #include "clutter-gst-private.h"
-#include "clutter-gst-util.h"
 #include "clutter-gst-video-texture.h"
 
 struct _ClutterGstVideoTexturePrivate
@@ -545,8 +544,11 @@ setup_pipeline (ClutterGstVideoTexture *video_texture)
       return FALSE;
     }
 
-  video_sink = clutter_gst_video_sink_new (CLUTTER_TEXTURE (video_texture));
-  g_object_set (G_OBJECT (video_sink), "qos", TRUE, "sync", TRUE, NULL);
+  video_sink = gst_element_factory_make ("cluttersink", NULL);
+  g_object_set (G_OBJECT (video_sink),
+                "texture", CLUTTER_TEXTURE (video_texture),
+                "qos", TRUE,
+                "sync", TRUE, NULL);
   g_object_set (G_OBJECT (pipeline),
                 "video-sink", video_sink,
                 "subtitle-font-desc", "Sans 16",

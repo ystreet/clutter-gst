@@ -149,7 +149,8 @@ main (int argc, char *argv[])
 
   src = gst_element_factory_make ("videotestsrc", NULL);
   capsfilter = gst_element_factory_make ("capsfilter", NULL);
-  sink = clutter_gst_video_sink_new (CLUTTER_TEXTURE (texture));
+  sink = gst_element_factory_make ("cluttersink", NULL);
+  g_object_set (sink, "texture", CLUTTER_TEXTURE (texture), NULL);
 
   /* make videotestsrc spit the format we want */
   caps = gst_caps_new_simple ("video/x-raw-rgb",

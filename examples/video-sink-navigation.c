@@ -118,7 +118,8 @@ main (int argc, char *argv[])
 
   test = gst_element_factory_make ("navigationtest", NULL);
   colorspace = gst_element_factory_make ("ffmpegcolorspace", NULL);
-  sink = clutter_gst_video_sink_new (CLUTTER_TEXTURE (texture));
+  sink = gst_element_factory_make ("cluttersink", NULL);
+  g_object_set (sink, "texture", CLUTTER_TEXTURE (texture), NULL);
 
   // g_object_set (src , "pattern", 10, NULL);
 

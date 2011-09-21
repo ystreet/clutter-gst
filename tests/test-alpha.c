@@ -165,7 +165,8 @@ main (int argc, char *argv[])
   src = gst_element_factory_make ("videotestsrc", NULL);
   g_object_set (G_OBJECT (src), "pattern", 1, NULL);
   capsfilter = gst_element_factory_make ("capsfilter", NULL);
-  sink = clutter_gst_video_sink_new (CLUTTER_TEXTURE (texture));
+  sink = gst_element_factory_make ("cluttersink", NULL);
+  g_object_set (G_OBJECT (sink), "texture", CLUTTER_TEXTURE (texture), NULL);
 
   /* make videotestsrc spit the format we want */
   if (g_strcmp0 (opt_fourcc, "RGB ") == 0)
