@@ -28,8 +28,6 @@
 
 #include <glib.h>
 
-#include "clutter-gst-video-texture.h"
-
 G_BEGIN_DECLS
 
 /* GLib has some define for that, but defining it ourselves allows to require a
@@ -45,11 +43,6 @@ G_BEGIN_DECLS
 
 #define CLUTTER_GST_PARAM_READWRITE     \
   (G_PARAM_READABLE | G_PARAM_WRITABLE | CLUTTER_GST_PARAM_STATIC)
-
-void
-_clutter_gst_video_texture_set_par (ClutterGstVideoTexture *texture,
-                                    guint                   par_n,
-                                    guint                   par_d);
 
 G_END_DECLS
 

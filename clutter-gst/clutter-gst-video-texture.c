@@ -73,9 +73,10 @@ struct _ClutterGstVideoTexturePrivate
 };
 
 enum {
-  PROP_0,
+  PROP_0 = 32,  /* Avoid overlap with player properties */
 
-  PROP_IDLE_MATERIAL
+  PROP_IDLE_MATERIAL,
+  PROP_PAR
 };
 
 static void clutter_gst_video_texture_media_init (ClutterMediaIface *iface);
@@ -437,12 +438,17 @@ clutter_gst_video_texture_set_property (GObject      *object,
 				        GParamSpec   *pspec)
 {
   ClutterGstVideoTexture *video_texture = CLUTTER_GST_VIDEO_TEXTURE (object);
+  ClutterGstVideoTexturePrivate *priv = video_texture->priv;
 
   switch (property_id)
     {
     case PROP_IDLE_MATERIAL:
       clutter_gst_video_texture_set_idle_material (video_texture,
                                                    g_value_get_boxed (value));
+      break;
+    case PROP_PAR:
+      priv->par_n = gst_value_get_fraction_numerator (value);
+      priv->par_d = gst_value_get_fraction_denominator (value);
       break;
 
     default:
@@ -466,6 +472,9 @@ clutter_gst_video_texture_get_property (GObject    *object,
     {
     case PROP_IDLE_MATERIAL:
       g_value_set_boxed (value, priv->idle_material);
+      break;
+    case PROP_PAR:
+      gst_value_set_fraction (value, priv->par_n, priv->par_d);
       break;
 
     default:
@@ -502,6 +511,14 @@ clutter_gst_video_texture_class_init (ClutterGstVideoTextureClass *klass)
                               COGL_TYPE_HANDLE,
                               CLUTTER_GST_PARAM_READWRITE);
   g_object_class_install_property (object_class, PROP_IDLE_MATERIAL, pspec);
+
+  pspec = gst_param_spec_fraction ("pixel-aspect-ratio",
+                                   "Pixel Aspect Ratio",
+                                   "Pixel aspect ratio of incoming frames",
+                                   1, 100, 100, 1, 1, 1,
+                                   CLUTTER_GST_PARAM_READWRITE);
+  g_object_class_install_property (object_class, PROP_PAR, pspec);
+
 
   clutter_gst_player_class_init (object_class);
 }
@@ -572,20 +589,6 @@ clutter_gst_video_texture_init (ClutterGstVideoTexture *video_texture)
 /*
  * Private symbols
  */
-
-/* This function is called from the sink set_caps(). we receive the first
- * buffer way after this so are told about the par before size_changed has
- * been fired */
-void
-_clutter_gst_video_texture_set_par (ClutterGstVideoTexture *texture,
-                                    guint                   par_n,
-                                    guint                   par_d)
-{
-  ClutterGstVideoTexturePrivate *priv = texture->priv;
-
-  priv->par_n = par_n;
-  priv->par_d = par_d;
-}
 
 /**
  * clutter_gst_video_texture_new:
