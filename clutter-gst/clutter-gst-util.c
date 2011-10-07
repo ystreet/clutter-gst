@@ -94,8 +94,14 @@
  * </example>
  */
 
+#include "config.h"
+
 #include <gst/gst.h>
 #include <clutter/clutter.h>
+
+#if CLUTTER_WINDOWING_X11
+#include <X11/Xlib.h>
+#endif
 
 #include "clutter-gst-debug.h"
 #include "clutter-gst-video-sink.h"
@@ -124,6 +130,11 @@ clutter_gst_init (int    *argc,
 
   if (clutter_gst_is_initialized)
     return CLUTTER_INIT_SUCCESS;
+
+#if CLUTTER_WINDOWING_X11
+  /* Required by some GStreamer element like VA */
+  XInitThreads ();
+#endif
 
   gst_init (argc, argv);
   retval = clutter_init (argc, argv);
@@ -178,6 +189,11 @@ clutter_gst_init_with_args (int            *argc,
 
   if (clutter_gst_is_initialized)
     return CLUTTER_INIT_SUCCESS;
+
+#if CLUTTER_WINDOWING_X11
+  /* Required by some gstreamer element like VA */
+  XInitThreads ();
+#endif
 
   context = g_option_context_new (parameter_string);
 

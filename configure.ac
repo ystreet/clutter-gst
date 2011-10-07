@@ -79,6 +79,7 @@ AC_SUBST([CLUTTER_GST_RELEASE_STATUS], [clutter_gst_release_status])
 GLIB_REQ_VERSION=2.18.0
 CLUTTER_REQ_VERSION=1.6.0
 GSTREAMER_REQ_VERSION=0.10.26
+GST_PLUGINS_BAD_REQ_VERSION=0.10.22.1
 
 AC_SUBST(GLIB_REQ_VERSION)
 AC_SUBST(CLUTTER_REQ_VERSION)
@@ -136,22 +137,29 @@ AM_CONDITIONAL([HAVE_PYTHON], [test "x$have_python" = "xyes"])
 
 dnl ========================================================================
 
-pkg_modules="clutter-1.0 >= $CLUTTER_REQ_VERSION gio-2.0 >= $GLIB_REQ_VERSION"
-PKG_CHECK_MODULES(CLUTTER_GST, [$pkg_modules])
+PKG_CHECK_MODULES(CLUTTER_GST,
+                  [clutter-1.0 >= $CLUTTER_REQ_VERSION
+                   gio-2.0 >= $GLIB_REQ_VERSION])
 
 dnl ========================================================================
 
 GST_MAJORMINOR=0.10
 
-pkg_modules="gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION gstreamer-plugins-base-$GST_MAJORMINOR gstreamer-base-$GST_MAJORMINOR gstreamer-interfaces-$GST_MAJORMINOR gstreamer-video-$GST_MAJORMINOR gstreamer-audio-$GST_MAJORMINOR gstreamer-tag-$GST_MAJORMINOR"
-PKG_CHECK_MODULES(GST, [$pkg_modules])
+PKG_CHECK_MODULES(GST,
+                  [gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION
+                   gstreamer-plugins-base-$GST_MAJORMINOR
+                   gstreamer-base-$GST_MAJORMINOR
+                   gstreamer-interfaces-$GST_MAJORMINOR
+                   gstreamer-video-$GST_MAJORMINOR
+                   gstreamer-audio-$GST_MAJORMINOR
+                   gstreamer-tag-$GST_MAJORMINOR])
 
 dnl libs used by the plugin
 PKG_CHECK_MODULES([PLUGIN],
                   [clutter-1.0 >= $CLUTTER_REQ_VERSION
                    gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION
                    gstreamer-base-$GST_MAJORMINOR
-                   gstreamer-interfaces-$GST_MAJORMINOR])
+                   gstreamer-interfaces-$GST_MAJORMINOR ])
 
 dnl define location of gstreamer plugin directory
 plugindir="\$(libdir)/gstreamer-$GST_MAJORMINOR"
@@ -200,6 +208,17 @@ AS_IF([test "x$have_cogl_1_8" != xyes],
                 [AC_CHECK_LIB([GL], [glGetIntegerv], [GL_LDFLAGS="-lGL"])])
         AC_SUBST([GL_LDFLAGS])
       ])
+
+dnl ========================================================================
+dnl Experimental support for hardware accelerated decoders.
+
+PKG_CHECK_MODULES(HW,
+                 [gstreamer-basevideo-$GST_MAJORMINOR >= $GST_PLUGINS_BAD_REQ_VERSION],
+                 [
+                   have_hw_decoder_support=yes
+                   AC_DEFINE([HAVE_HW_DECODER_SUPPORT], [1],
+                             ["Defined if building Clutter with HW decoder support"])
+                 ],[ have_hw_decoder_support=no ])
 
 dnl ========================================================================
 
@@ -303,4 +322,5 @@ echo ""
 echo " • Extra:"
 echo "        API documentation : ${enable_gtk_doc}"
 echo "        Introspection data: ${enable_introspection}"
+echo "        HW Decoder support: ${have_hw_decoder_support}"
 echo ""

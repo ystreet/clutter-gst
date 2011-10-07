@@ -75,11 +75,12 @@ AM_CFLAGS = 				\
 	$(CLUTTER_GST_DEBUG_CFLAGS)	\
 	$(CLUTTER_GST_CFLAGS)		\
 	$(GST_CFLAGS)			\
+	$(HW_CFLAGS)			\
 	$(NULL)
 
 lib_LTLIBRARIES = libclutter-gst-@CLUTTER_GST_MAJORMINOR@.la
 
-libclutter_gst_@CLUTTER_GST_MAJORMINOR@_la_LIBADD  = @CLUTTER_GST_LIBS@ $(GST_LIBS)
+libclutter_gst_@CLUTTER_GST_MAJORMINOR@_la_LIBADD  = @CLUTTER_GST_LIBS@ $(GST_LIBS) $(HW_LIBS)
 libclutter_gst_@CLUTTER_GST_MAJORMINOR@_la_LDFLAGS =	\
 	$(CLUTTER_GST_LT_LDFLAGS)			\
 	$(GL_LDFLAGS)					\
@@ -105,7 +106,7 @@ libgstclutter_la_SOURCES =	\
 
 plugin_LTLIBRARIES = libgstclutter.la
 
-libgstclutter_la_LIBADD  = $(PLUGIN_LIBS)
+libgstclutter_la_LIBADD  = $(PLUGIN_LIBS) $(HW_LIBS)
 libgstclutter_la_LDFLAGS =	\
 	$(GL_LDFLAGS)		\
 	-module -avoid-version	\

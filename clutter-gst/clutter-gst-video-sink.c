@@ -59,6 +59,11 @@
 #include <gst/interfaces/navigation.h>
 #include <gst/riff/riff-ids.h>
 
+#ifdef HAVE_HW_DECODER_SUPPORT
+#define GST_USE_UNSTABLE_API 1
+#include <gst/video/gstsurfacebuffer.h>
+#endif
+
 #include <glib.h>
 #include <string.h>
 
@@ -106,17 +111,25 @@ static gchar *yv12_to_rgba_shader = \
      FRAGMENT_SHADER_END
      "}";
 
+#define BASE_SINK_CAPS GST_VIDEO_CAPS_YUV("AYUV") ";" \
+                       GST_VIDEO_CAPS_YUV("YV12") ";" \
+                       GST_VIDEO_CAPS_YUV("I420") ";" \
+                       GST_VIDEO_CAPS_RGBA        ";" \
+                       GST_VIDEO_CAPS_BGRA        ";" \
+                       GST_VIDEO_CAPS_RGB         ";" \
+                       GST_VIDEO_CAPS_BGR
+
+#ifdef HAVE_HW_DECODER_SUPPORT
+#define SINK_CAPS GST_VIDEO_CAPS_SURFACE ";" BASE_SINK_CAPS
+#else
+#define SINK_CAPS BASE_SINK_CAPS
+#endif
+
 static GstStaticPadTemplate sinktemplate_all
  = GST_STATIC_PAD_TEMPLATE ("sink",
                             GST_PAD_SINK,
                             GST_PAD_ALWAYS,
-                            GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV("AYUV") ";" \
-                                             GST_VIDEO_CAPS_YUV("YV12") ";" \
-                                             GST_VIDEO_CAPS_YUV("I420") ";" \
-                                             GST_VIDEO_CAPS_RGBA        ";" \
-                                             GST_VIDEO_CAPS_BGRA        ";" \
-                                             GST_VIDEO_CAPS_RGB         ";" \
-                                             GST_VIDEO_CAPS_BGR));
+                            GST_STATIC_CAPS (SINK_CAPS));
 
 GST_DEBUG_CATEGORY_STATIC (clutter_gst_video_sink_debug);
 #define GST_CAT_DEFAULT clutter_gst_video_sink_debug
@@ -144,6 +157,7 @@ typedef enum
   CLUTTER_GST_AYUV,
   CLUTTER_GST_YV12,
   CLUTTER_GST_I420,
+  CLUTTER_GST_SURFACE
 } ClutterGstVideoFormat;
 
 /*
@@ -221,6 +235,10 @@ struct _ClutterGstVideoSinkPrivate
   ClutterGstRenderer      *renderer;
 
   GArray                  *signal_handler_ids;
+
+#ifdef HAVE_HW_DECODER_SUPPORT
+  GstSurfaceConverter     *converter;
+#endif
 };
 
 #define GstNavigationClass GstNavigationInterface
@@ -367,6 +385,12 @@ clutter_gst_parse_caps (GstCaps             *caps,
       format = CLUTTER_GST_AYUV;
       bgr = FALSE;
     }
+#ifdef HAVE_HW_DECODER_SUPPORT
+  else if (gst_structure_has_name (structure, GST_VIDEO_CAPS_SURFACE))
+    {
+      format = CLUTTER_GST_SURFACE;
+    }
+#endif
   else
     {
       guint32 mask;
@@ -934,6 +958,86 @@ static ClutterGstRenderer ayuv_glsl_renderer =
   clutter_gst_ayuv_upload,
 };
 
+/*
+ * HW Surfaces
+ */
+
+#ifdef HAVE_HW_DECODER_SUPPORT
+static void
+clutter_gst_hw_init (ClutterGstVideoSink *sink)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  CoglHandle tex;
+  CoglHandle material;
+
+  /* Default texture is 1x1, let's replace it with one big enough. */
+  tex = cogl_texture_new_with_size (priv->width, priv->height,
+                                    CLUTTER_GST_TEXTURE_FLAGS,
+                                    COGL_PIXEL_FORMAT_BGRA_8888);
+
+  material = cogl_material_new ();
+  cogl_material_set_layer (material, 0, tex);
+  clutter_texture_set_cogl_material (priv->texture, material);
+
+  cogl_object_unref (tex);
+  cogl_object_unref (material);
+}
+
+static void
+clutter_gst_hw_deinit (ClutterGstVideoSink *sink)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+
+  if (priv->converter != NULL)
+    g_object_unref (priv->converter);
+  priv->converter = NULL;
+}
+
+static void
+clutter_gst_hw_upload (ClutterGstVideoSink *sink,
+                       GstBuffer           *buffer)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  GstSurfaceBuffer *surface;
+
+  g_return_if_fail (GST_IS_SURFACE_BUFFER (buffer));
+  surface = GST_SURFACE_BUFFER (buffer);
+
+  if (G_UNLIKELY (priv->converter == NULL)) {
+    CoglHandle tex;
+    GLuint gl_texture;
+    GLenum gl_target;
+    GValue value = {0};
+
+    tex = clutter_texture_get_cogl_texture (priv->texture);
+    cogl_texture_get_gl_texture (tex, &gl_texture, &gl_target);
+    g_return_if_fail (gl_target == GL_TEXTURE_2D);
+
+    g_value_init (&value, G_TYPE_UINT);
+    g_value_set_uint (&value, gl_texture);
+
+    priv->converter = gst_surface_buffer_create_converter (surface, "opengl", &value);
+    g_return_if_fail (priv->converter);
+  }
+
+  gst_surface_converter_upload (priv->converter, surface);
+
+  /* The texture is dirty, schedule a redraw */
+  clutter_actor_queue_redraw (CLUTTER_ACTOR (priv->texture));
+}
+
+static ClutterGstRenderer hw_renderer =
+{
+  "HW surface",
+  CLUTTER_GST_SURFACE,
+  0,
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_SURFACE ", opengl=true"),
+  clutter_gst_hw_init,
+  clutter_gst_hw_deinit,
+  clutter_gst_hw_upload,
+};
+#endif
+
 static GSList *
 clutter_gst_build_renderers_list (void)
 {
@@ -955,6 +1059,9 @@ clutter_gst_build_renderers_list (void)
       &i420_fp_renderer,
 #endif
       &ayuv_glsl_renderer,
+#ifdef HAVE_HW_DECODER_SUPPORT
+      &hw_renderer,
+#endif
       NULL
     };
 

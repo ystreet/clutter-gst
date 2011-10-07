@@ -57,6 +57,13 @@
 #include "clutter-gst-player.h"
 #include "clutter-gst-private.h"
 
+#if CLUTTER_WINDOWING_X11 && HAVE_HW_DECODER_SUPPORT
+#define GST_USE_UNSTABLE_API 1
+#include <gst/video/videocontext.h>
+#include <clutter/x11/clutter-x11.h>
+#endif
+
+
 typedef ClutterGstPlayerIface       ClutterGstPlayerInterface;
 
 G_DEFINE_INTERFACE_WITH_CODE (ClutterGstPlayer, clutter_gst_player, G_TYPE_OBJECT,
@@ -1876,6 +1883,38 @@ clutter_gst_player_get_idle_impl (ClutterGstPlayer *player)
 
 /**/
 
+#if CLUTTER_WINDOWING_X11 && HAVE_HW_DECODER_SUPPORT
+static GstBusSyncReply
+on_sync_message (GstBus * bus, GstMessage * message, gpointer user_data)
+{
+  Display *display = user_data;
+  GstVideoContext *context;
+  const gchar **types;
+
+  if (gst_video_context_message_parse_prepare (message, &types, &context)) {
+    gint i;
+
+    for (i = 0; types[i]; i++) {
+
+      if (!strcmp(types[i], "x11-display")) {
+        gst_video_context_set_context_pointer (context, "x11-display", display);
+      }
+      else if (!strcmp(types[i], "x11-display-name")) {
+        gst_video_context_set_context_string (context, "x11-display-name",
+            DisplayString (display));
+      } else {
+        continue;
+      }
+
+      gst_message_unref (message);
+      return GST_BUS_DROP;
+    }
+  }
+
+  return GST_BUS_PASS;
+}
+#endif
+
 /**
  * clutter_gst_player_init:
  * @player: a #ClutterGstPlayer
@@ -1991,6 +2030,11 @@ clutter_gst_player_init (ClutterGstPlayer *player)
   g_signal_connect (priv->pipeline, "notify::current-text",
                     G_CALLBACK (on_current_text_changed),
                     player);
+
+#if CLUTTER_WINDOWING_X11 && HAVE_HW_DECODER_SUPPORT
+  gst_bus_set_sync_handler (priv->bus, on_sync_message,
+      clutter_x11_get_default_display ());
+#endif
 
   gst_object_unref (GST_OBJECT (priv->bus));
 
