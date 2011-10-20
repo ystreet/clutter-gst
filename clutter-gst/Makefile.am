@@ -127,24 +127,24 @@ ClutterGst-@CLUTTER_GST_API_VERSION@.gir: $(INTROSPECTION_SCANNER) libclutter-gs
 		--namespace ClutterGst --nsversion=@CLUTTER_GST_API_VERSION@ \
 		$(INCLUDES) \
 		$(AM_CPPFLAGS) \
+		-D GST_USE_UNSTABLE_API \
 		--quiet --warn-all \
 		--add-include-path=$(srcdir) --add-include=path=. \
 		--c-include="clutter-gst/clutter-gst.h" \
 		--include=GObject-2.0 \
 		--include=Clutter-1.0 \
-		--include=Gst-0.10 \
-		--include=GstBase-0.10 \
-		--include=GstInterfaces-0.10 \
-		--include=GstVideo-0.10 \
-		--include=GstAudio-0.10 \
+		--include=Gst-1.0 \
+		--include=GstBase-1.0 \
+		--include=GstVideo-1.0 \
+		--include=GstAudio-1.0 \
 		--add-init-section="clutter_gst_init(0,NULL);" \
-		--library=clutter-gst-@CLUTTER_GST_API_VERSION@ \
+		--library=libclutter-gst-@CLUTTER_GST_API_VERSION@.la \
 		--libtool="$(top_builddir)/libtool" \
 		--output $@ \
 		--pkg gobject-2.0 \
 		--pkg clutter-1.0 \
-		--pkg gstreamer-0.10 \
-		--pkg gstreamer-base-0.10 \
+		--pkg gstreamer-1.0 \
+		--pkg gstreamer-base-1.0 \
 		--pkg-export clutter-gst-@CLUTTER_GST_API_VERSION@ \
 		$(cluttergstheaders_HEADERS) \
 		$(source_c)

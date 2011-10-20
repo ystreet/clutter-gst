@@ -52,15 +52,6 @@ static GOptionEntry options[] =
   { NULL }
 };
 
-static guint32
-parse_fourcc (const gchar *fourcc)
-{
-  if (strlen (fourcc) != 4)
-    return 0;
-
-  return GST_STR_FOURCC (fourcc);
-}
-
 void
 size_change (ClutterTexture *texture,
              gint            width,
@@ -151,9 +142,8 @@ main (int argc, char *argv[])
   g_object_set (sink, "texture", CLUTTER_TEXTURE (texture), NULL);
 
   /* make videotestsrc spit the format we want */
-  caps = gst_caps_new_simple ("video/x-raw-yuv",
-                              "format", GST_TYPE_FOURCC,
-                                        parse_fourcc (opt_fourcc),
+  caps = gst_caps_new_simple ("video/x-raw",
+                              "format", G_TYPE_STRING, opt_fourcc,
                               "framerate", GST_TYPE_FRACTION, opt_framerate, 1,
                               NULL);
   g_object_set (capsfilter, "caps", caps, NULL);

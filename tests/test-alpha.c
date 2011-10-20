@@ -171,9 +171,8 @@ main (int argc, char *argv[])
   /* make videotestsrc spit the format we want */
   if (g_strcmp0 (opt_fourcc, "RGB ") == 0)
     {
-      caps = gst_caps_new_simple ("video/x-raw-rgb",
-                                  "bpp", G_TYPE_INT, opt_bpp,
-                                  "depth", G_TYPE_INT, opt_depth,
+      caps = gst_caps_new_simple ("video/x-raw",
+				  "format", G_TYPE_STRING, "RGB",
                                   "framerate", GST_TYPE_FRACTION,
                                                opt_framerate, 1,
                                   NULL);
@@ -181,9 +180,9 @@ main (int argc, char *argv[])
     }
   else
     {
-      caps = gst_caps_new_simple ("video/x-raw-yuv",
-                                  "format", GST_TYPE_FOURCC,
-                                            parse_fourcc (opt_fourcc),
+      caps = gst_caps_new_simple ("video/x-raw",
+                                  "format", G_TYPE_STRING,
+				  opt_fourcc,
                                   "framerate", GST_TYPE_FRACTION,
                                                opt_framerate, 1,
                                   NULL);

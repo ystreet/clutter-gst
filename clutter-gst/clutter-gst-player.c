@@ -3,7 +3,7 @@
  *
  * GStreamer integration library for Clutter.
  *
- * clutter-gst-player.c - Wrap some convenience functions around playbin2
+ * clutter-gst-player.c - Wrap some convenience functions around playbin
  *
  * Authored By Damien Lespiau    <damien.lespiau@intel.com>
  *             Lionel Landwerlin <lionel.g.landwerlin@linux.intel.com>
@@ -49,7 +49,7 @@
 
 #include <gst/video/video.h>
 #include <gst/tag/tag.h>
-#include <gst/interfaces/streamvolume.h>
+#include <gst/audio/streamvolume.h>
 
 #include "clutter-gst-debug.h"
 #include "clutter-gst-enum-types.h"
@@ -714,7 +714,7 @@ get_progress (ClutterGstPlayer *player)
   if (!priv->pipeline)
     return 0.0;
 
-  /* when hitting an error or after an EOS, playbin2 has some weird values when
+  /* when hitting an error or after an EOS, playbin has some weird values when
    * querying the duration and progress. We default to 0.0 on error and 1.0 on
    * EOS */
   if (priv->in_error)
@@ -729,7 +729,7 @@ get_progress (ClutterGstPlayer *player)
       return 1.0;
     }
 
-  /* When seeking, the progress returned by playbin2 is 0.0. We want that to be
+  /* When seeking, the progress returned by playbin is 0.0. We want that to be
    * the last known position instead as returning 0.0 will have some ugly
    * effects, say on a progress bar getting updated from the progress tick. */
   if (priv->in_seek || priv->is_changing_uri)
@@ -924,7 +924,7 @@ bus_message_error_cb (GstBus           *bus,
 
 /*
  * This is what's intented in the EOS callback:
- *   - receive EOS from playbin 2
+ *   - receive EOS from playbin
  *   - fire the EOS signal, the user can install a signal handler to loop the
  *     video for instance.
  *   - after having emitted the signal, check the state of the pipeline
@@ -981,7 +981,7 @@ bus_message_buffering_cb (GstBus           *bus,
 
       CLUTTER_GST_NOTE (BUFFERING, "buffer-fill: %.02f", priv->buffer_fill);
 
-      /* The playbin2 documentation says that we need to pause the pipeline
+      /* The playbin documentation says that we need to pause the pipeline
        * when there's not enough data yet. We try to limit the calls to
        * gst_element_set_state() */
       gst_element_get_state (priv->pipeline, &current_state, NULL, 0);
@@ -1054,12 +1054,11 @@ query_duration (ClutterGstPlayer *player)
 {
   ClutterGstPlayerPrivate *priv = PLAYER_GET_PRIVATE (player);
   gboolean success;
-  GstFormat format = GST_FORMAT_TIME;
   gint64 duration;
   gdouble new_duration, difference;
 
   success = gst_element_query_duration (priv->pipeline,
-                                        &format,
+                                        GST_FORMAT_TIME,
                                         &duration);
   if (G_UNLIKELY (success != TRUE))
     return;
@@ -1218,7 +1217,7 @@ on_volume_changed_main_context (gpointer data)
   return FALSE;
 }
 
-/* playbin2 proxies the volume property change notification directly from
+/* playbin proxies the volume property change notification directly from
  * the element having the "volume" property. This means this callback is
  * called from the thread that runs the element, potentially different from
  * the main thread */
@@ -1619,10 +1618,10 @@ get_pipeline (void)
 {
   GstElement *pipeline, *audio_sink;
 
-  pipeline = gst_element_factory_make ("playbin2", "pipeline");
+  pipeline = gst_element_factory_make ("playbin", "pipeline");
   if (!pipeline)
     {
-      g_critical ("Unable to create playbin2 element");
+      g_critical ("Unable to create playbin element");
       return NULL;
     }
 
@@ -2074,7 +2073,7 @@ clutter_gst_player_init (ClutterGstPlayer *player)
 
 #if defined(CLUTTER_WINDOWING_X11) && defined (HAVE_HW_DECODER_SUPPORT)
   gst_bus_set_sync_handler (priv->bus, on_sync_message,
-      clutter_x11_get_default_display ());
+      clutter_x11_get_default_display (), NULL);
 #endif
 
   gst_object_unref (GST_OBJECT (priv->bus));

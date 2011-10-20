@@ -554,17 +554,8 @@ setup_pipeline (ClutterGstVideoTexture *video_texture)
       return FALSE;
     }
 
-  video_sink = gst_element_factory_make ("autocluttersink", NULL);
-  if (!video_sink)
-    {
-      g_critical ("Unable to get autocluttersink");
-      return FALSE;
-    }
+  video_sink = gst_element_factory_make ("cluttersink", NULL);
 
-  g_signal_connect (video_sink,
-		    "element-added",
-		    G_CALLBACK (on_autocluttersink_element_added),
-		    video_texture);
   g_object_set (G_OBJECT (video_sink),
                 "texture", CLUTTER_TEXTURE (video_texture),
 		NULL);

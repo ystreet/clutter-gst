@@ -37,6 +37,11 @@
 #include <gst/base/gstbasesink.h>
 #include <clutter/clutter.h>
 
+#if defined (CLUTTER_WINDOWING_X11)
+#include <X11/Xlib.h>
+#endif
+
+
 G_BEGIN_DECLS
 
 #define CLUTTER_GST_TYPE_VIDEO_SINK clutter_gst_video_sink_get_type()

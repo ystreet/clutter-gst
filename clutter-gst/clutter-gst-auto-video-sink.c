@@ -38,13 +38,6 @@
 GST_DEBUG_CATEGORY_EXTERN (clutter_gst_auto_video_sink_debug);
 #define GST_CAT_DEFAULT clutter_gst_auto_video_sink_debug
 
-static GstElementDetails clutter_gst_auto_video_sink_details = {
-  "Auto Clutter Sink",
-  "Sink/Video",
-  "Autoplug clutter capable video sinks",
-  "Josep Torra <support@fluendo.com>"
-};
-
 static GstStaticPadTemplate sink_template_factory =
   GST_STATIC_PAD_TEMPLATE ("sink",
                            GST_PAD_SINK,
@@ -57,10 +50,11 @@ enum
   PROP_TEXTURE
 };
 
-GST_BOILERPLATE (ClutterGstAutoVideoSink,
+G_DEFINE_TYPE (ClutterGstAutoVideoSink,
                  clutter_gst_auto_video_sink,
-                 GstBin,
                  GST_TYPE_BIN);
+
+#define parent_class clutter_gst_auto_video_sink_parent_class
 
 typedef struct
 {
@@ -85,7 +79,7 @@ _get_sink_caps (GstElement *sink)
   if ((sinkpad = gst_element_get_static_pad (sink, "sink")))
     {
       /* Got the sink pad, now let's see which caps will be accepted */
-      caps = gst_pad_get_caps (sinkpad);
+      caps = gst_pad_query_caps (sinkpad, NULL);
     }
   gst_object_unref (sinkpad);
 
@@ -178,7 +172,7 @@ _create_element_with_pretty_name (ClutterGstAutoVideoSink *bin,
   GstElement *element;
   gchar *name, *marker;
 
-  marker = g_strdup (GST_PLUGIN_FEATURE (factory)->name);
+  marker = g_strdup (gst_plugin_feature_get_name(GST_PLUGIN_FEATURE (factory)));
   if (g_str_has_suffix (marker, "sink"))
     marker[strlen (marker) - 4] = '\0';
   if (g_str_has_prefix (marker, "gst"))
@@ -226,7 +220,7 @@ _sinks_discover (ClutterGstAutoVideoSink *bin)
   GstCaps *caps = gst_caps_new_empty ();
   GList *factories, *item;
 
-  factories = gst_default_registry_feature_filter (
+  factories = gst_registry_feature_filter (gst_registry_get(),
     (GstPluginFeatureFilter)_factory_filter, FALSE, bin);
   factories = g_list_sort (factories, (GCompareFunc)_factories_compare_ranks);
 
@@ -238,7 +232,8 @@ _sinks_discover (ClutterGstAutoVideoSink *bin)
 
       if ((el = _create_element_with_pretty_name (bin, f)))
         {
-          GST_DEBUG_OBJECT (bin, "Testing %s", GST_PLUGIN_FEATURE (f)->name);
+          GST_DEBUG_OBJECT (bin, "Testing %s", gst_plugin_feature_get_name(
+                                                     GST_PLUGIN_FEATURE (f)));
 
           /* Check for a texture property with CLUTTER_TYPE_TEXTURE type */
           if (!_is_clutter_sink (el))
@@ -249,12 +244,11 @@ _sinks_discover (ClutterGstAutoVideoSink *bin)
           se = _sink_element_create (el);
           if (se)
             {
-              GstCaps *caps_union = gst_caps_union (caps, se->caps);
-              gst_caps_unref (caps);
+              GstCaps *caps_union = gst_caps_merge (caps, gst_caps_ref(se->caps));
               caps = caps_union;
               bin->sinks = g_slist_append (bin->sinks, se);
               GST_DEBUG_OBJECT (bin, "Added %s with caps %" GST_PTR_FORMAT,
-                                GST_PLUGIN_FEATURE (f)->name, se->caps);
+                                gst_plugin_feature_get_name(GST_PLUGIN_FEATURE (f)), se->caps);
             }
           else
             {
@@ -324,8 +318,9 @@ clutter_gst_auto_video_sink_do_async_start (ClutterGstAutoVideoSink *bin)
   bin->async_pending = TRUE;
 
   GST_INFO_OBJECT (bin, "Sending async_start message");
-  message = gst_message_new_async_start (GST_OBJECT_CAST (bin), FALSE);
-  GST_BIN_CLASS (parent_class)->handle_message (GST_BIN_CAST (bin), message);
+  message = gst_message_new_async_start (GST_OBJECT_CAST (bin));
+  GST_BIN_CLASS (parent_class)->handle_message (
+                                                 GST_BIN_CAST (bin), message);
 }
 
 static void
@@ -336,9 +331,9 @@ clutter_gst_auto_video_sink_do_async_done (ClutterGstAutoVideoSink *bin)
   if (bin->async_pending)
     {
       GST_INFO_OBJECT (bin, "Sending async_done message");
-      message = gst_message_new_async_done (GST_OBJECT_CAST (bin));
-      GST_BIN_CLASS (parent_class)->handle_message (GST_BIN_CAST (bin),
-                                                    message);
+      message = gst_message_new_async_done (GST_OBJECT_CAST (bin), FALSE);
+      GST_BIN_CLASS (parent_class)->handle_message (
+                                                      GST_BIN_CAST (bin),message);
 
       bin->async_pending = FALSE;
     }
@@ -405,27 +400,18 @@ beach:
   return ret;
 }
 
-static void
-clutter_gst_auto_video_sink_sink_pad_blocked_cb (GstPad *pad, gboolean blocked,
+static GstPadProbeReturn
+clutter_gst_auto_video_sink_sink_pad_blocked_cb (GstPad *pad, GstPadProbeInfo *info,
                                                  gpointer user_data)
 {
   ClutterGstAutoVideoSink *bin = CLUTTER_GST_AUTO_VIDEO_SINK_CAST (user_data);
   GstCaps *caps = NULL;
 
-  /* In case the pad is not blocked we should not do anything but return */
-  if (!blocked)
-    {
-      GST_DEBUG_OBJECT (bin, "pad successfully unblocked");
-      return;
-    }
-
-  CLUTTER_GST_AUTO_VIDEO_SINK_LOCK (bin);
-
   /* This only occurs when our bin is first initialised || stream changes */
   if (G_UNLIKELY (!bin->setup))
     {
 
-      caps = gst_pad_peer_get_caps_reffed (bin->sink_pad);
+      caps = gst_pad_peer_query_caps (bin->sink_pad, NULL);
 
       if (G_UNLIKELY (!caps))
         {
@@ -459,56 +445,14 @@ beach:
     {
       gst_caps_unref (caps);
     }
-  gst_pad_set_blocked_async (bin->sink_block_pad, FALSE,
-                             clutter_gst_auto_video_sink_sink_pad_blocked_cb,
-                             bin);
-  CLUTTER_GST_AUTO_VIDEO_SINK_UNLOCK (bin);
-  return;
-}
-
-static gboolean
-clutter_gst_auto_video_sink_set_caps (GstPad *pad, GstCaps *caps)
-{
-  ClutterGstAutoVideoSink *bin = CLUTTER_GST_AUTO_VIDEO_SINK (
-    gst_pad_get_parent (pad));
-  gboolean ret = TRUE;
-  GstPad *target = NULL;
-
-  GST_DEBUG_OBJECT (pad, "Setting caps: %" GST_PTR_FORMAT, caps);
-
-  target = gst_ghost_pad_get_target (GST_GHOST_PAD_CAST (bin->sink_pad));
-
-  CLUTTER_GST_AUTO_VIDEO_SINK_LOCK (bin);
-
-  if (target && gst_pad_accept_caps (target, caps))
-    {
-      GST_DEBUG_OBJECT (pad, "Target accepts caps");
-      ret = bin->sink_setcaps (pad, caps);
-      CLUTTER_GST_AUTO_VIDEO_SINK_UNLOCK (bin);
-      goto out;
-    }
-
-  GST_DEBUG_OBJECT (pad, "Target did not accept caps");
-
-  bin->setup = FALSE;
-  gst_pad_set_blocked_async (bin->sink_block_pad, TRUE,
-                             clutter_gst_auto_video_sink_sink_pad_blocked_cb,
-                             bin);
-  CLUTTER_GST_AUTO_VIDEO_SINK_UNLOCK (bin);
-
-out:
-  if (target)
-    gst_object_unref (target);
-  gst_object_unref (bin);
-  return ret;
+  bin->sink_block_id = 0;
+  return GST_PAD_PROBE_REMOVE;
 }
 
 static GstCaps *
-clutter_gst_auto_video_sink_get_caps (GstPad *pad)
+clutter_gst_auto_video_sink_get_caps (ClutterGstAutoVideoSink *bin)
 {
   GstCaps *ret;
-  ClutterGstAutoVideoSink *bin = CLUTTER_GST_AUTO_VIDEO_SINK (
-    gst_pad_get_parent (pad));
 
   if (bin->video_caps)
     {
@@ -519,15 +463,14 @@ clutter_gst_auto_video_sink_get_caps (GstPad *pad)
       ret = gst_static_pad_template_get_caps (&sink_template_factory);
     }
 
-  gst_object_unref (bin);
   return ret;
 }
 
 static gboolean
-clutter_gst_auto_video_sink_accept_caps (GstPad *pad, GstCaps *caps)
+clutter_gst_auto_video_sink_accept_caps (ClutterGstAutoVideoSink *bin, GstCaps *caps)
 {
   gboolean ret = FALSE;
-  GstCaps *allowed_caps = clutter_gst_auto_video_sink_get_caps (pad);
+  GstCaps *allowed_caps = clutter_gst_auto_video_sink_get_caps (bin);
 
   if (allowed_caps)
     {
@@ -538,13 +481,50 @@ clutter_gst_auto_video_sink_accept_caps (GstPad *pad, GstCaps *caps)
       if (!gst_caps_is_empty (result))
         ret = TRUE;
 
-      gst_caps_unref (result);
+       caps = result;
     }
 
   gst_caps_unref (allowed_caps);
 
   return ret;
 }
+
+static gboolean
+clutter_gst_auto_video_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
+{
+  gboolean res;
+  ClutterGstAutoVideoSink *bin = CLUTTER_GST_AUTO_VIDEO_SINK (parent);
+
+  switch (GST_QUERY_TYPE (query)) {
+    case GST_QUERY_ACCEPT_CAPS:
+      {
+        GstCaps *caps;
+
+       gst_query_parse_accept_caps (query, &caps);
+        res = clutter_gst_auto_video_sink_accept_caps (bin, caps);
+        gst_query_set_accept_caps_result (query, res);
+        /* return TRUE, we have answered the query */
+        res = TRUE;
+      }
+      break;
+    case GST_QUERY_CAPS:
+      {
+        GstCaps *caps, *filter;
+
+        gst_query_parse_caps (query, &filter);
+        caps = clutter_gst_auto_video_sink_get_caps (bin);
+        gst_query_set_caps_result (query, caps);
+        gst_caps_unref (caps);
+        res = TRUE;
+      }
+      break;
+    default:
+      res = gst_pad_query_default (pad, parent, query);
+      break;
+  }
+  return res;
+}
+
 
 static GstStateChangeReturn
 clutter_gst_auto_video_sink_change_state (GstElement    *element,
@@ -564,10 +544,11 @@ clutter_gst_auto_video_sink_change_state (GstElement    *element,
       /* Here we set our callback to intercept data flow on the first buffer */
       GST_DEBUG_OBJECT (bin, "try to block input pad to setup internal "
                              "pipeline");
-      gst_pad_set_blocked_async (
-        bin->sink_block_pad, TRUE,
-        clutter_gst_auto_video_sink_sink_pad_blocked_cb,
-        bin);
+
+      if (bin->sink_block_id == 0)
+        bin->sink_block_id = gst_pad_add_probe(bin->sink_block_pad, GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM,
+          clutter_gst_auto_video_sink_sink_pad_blocked_cb,
+          bin, NULL);
       ret = GST_STATE_CHANGE_ASYNC;
       clutter_gst_auto_video_sink_do_async_start (bin);
       CLUTTER_GST_AUTO_VIDEO_SINK_UNLOCK (bin);
@@ -608,10 +589,10 @@ clutter_gst_auto_video_sink_change_state (GstElement    *element,
       CLUTTER_GST_AUTO_VIDEO_SINK_LOCK (bin);
 
       /* Unblock pad */
-      gst_pad_set_blocked_async (
-        bin->sink_block_pad, FALSE,
-        clutter_gst_auto_video_sink_sink_pad_blocked_cb,
-        bin);
+      if (bin->sink_block_id != 0) {
+        gst_pad_remove_probe (bin->sink_block_pad, bin->sink_block_id);
+        bin->sink_block_id = 0;
+      }
       /* Unset ghost pad target */
       GST_DEBUG_OBJECT (bin, "setting ghost pad target to NULL");
       gst_ghost_pad_set_target (GST_GHOST_PAD (bin->sink_pad), NULL);
@@ -668,7 +649,7 @@ clutter_gst_auto_video_sink_dispose (GObject *object)
 
   bin->texture = NULL;
 
-  GST_CALL_PARENT (G_OBJECT_CLASS, dispose, (object));
+  G_OBJECT_CLASS (parent_class)->dispose((GObject *) object);
 }
 
 static void
@@ -739,28 +720,25 @@ clutter_gst_auto_video_sink_get_property (GObject    *object,
 }
 
 static void
-clutter_gst_auto_video_sink_base_init (gpointer g_class)
-{
-  GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-
-  gst_element_class_add_pad_template (element_class,
-                         gst_static_pad_template_get (&sink_template_factory));
-
-  gst_element_class_set_details (element_class,
-                                 &clutter_gst_auto_video_sink_details);
-}
-
-static void
 clutter_gst_auto_video_sink_class_init (ClutterGstAutoVideoSinkClass *klass)
 {
   GObjectClass *oclass = G_OBJECT_CLASS (klass);
-  GstElementClass *gstelement_class;
+  GstElementClass *gstelement_class = GST_ELEMENT_CLASS(klass);
   GParamSpec *pspec;
 
   oclass->dispose = clutter_gst_auto_video_sink_dispose;
   oclass->finalize = clutter_gst_auto_video_sink_finalize;
   oclass->set_property = clutter_gst_auto_video_sink_set_property;
   oclass->get_property = clutter_gst_auto_video_sink_get_property;
+
+  gst_element_class_add_pad_template (gstelement_class,
+                         gst_static_pad_template_get (&sink_template_factory));
+
+  gst_element_class_set_details_simple (gstelement_class,
+                             "Auto Clutter Sink",
+                             "Sink/Video",
+                             "Autoplug clutter capable video sinks",
+                             "Josep Torra <support@fluendo.com>");
 
   /**
     * ClutterGstAutoVideoSink:texture:
@@ -778,24 +756,22 @@ clutter_gst_auto_video_sink_class_init (ClutterGstAutoVideoSinkClass *klass)
 
   g_object_class_install_property (oclass, PROP_TEXTURE, pspec);
 
-  gstelement_class = (GstElementClass *)klass;
   gstelement_class->change_state =
     GST_DEBUG_FUNCPTR (clutter_gst_auto_video_sink_change_state);
 }
 
 static void
-clutter_gst_auto_video_sink_init (ClutterGstAutoVideoSink      *bin,
-                                  ClutterGstAutoVideoSinkClass *g_class)
+clutter_gst_auto_video_sink_init (ClutterGstAutoVideoSink      *bin)
 {
   GstPad *proxypad;
   GstPadTemplate *template;
+  GValue val = {0, };
 
   bin->setup = FALSE;
   bin->texture = NULL;
 
   /* Create a ghost pad with no target at first */
-  template = gst_static_pad_template_get (
-    &sink_template_factory);
+  template = gst_static_pad_template_get (&sink_template_factory);
   bin->sink_pad = gst_ghost_pad_new_no_target_from_template ("sink", template);
   gst_object_unref (template);
 
@@ -808,32 +784,26 @@ clutter_gst_auto_video_sink_init (ClutterGstAutoVideoSink      *bin,
       GstIterator *it = gst_pad_iterate_internal_links (bin->sink_pad);
       if (G_UNLIKELY (!it ||
                       gst_iterator_next (it,
-                                         (gpointer) & proxypad) !=
+                                         &val) !=
                       GST_ITERATOR_OK ||
-                      proxypad == NULL))
+                      g_value_get_object (&val) == NULL))
         {
           GST_ERROR_OBJECT (bin,
                             "failed to get internally linked pad from sinkpad");
         }
       if (it)
         gst_iterator_free (it);
+      proxypad = GST_PAD_CAST (g_value_get_object (&val));
     }
 
   bin->sink_block_pad = proxypad;
 
-  bin->sink_setcaps = GST_PAD_SETCAPSFUNC (bin->sink_pad);
-  gst_pad_set_setcaps_function (bin->sink_pad,
+  gst_pad_set_query_function (bin->sink_pad,
                                 GST_DEBUG_FUNCPTR (
-                                  clutter_gst_auto_video_sink_set_caps));
-  gst_pad_set_getcaps_function (bin->sink_pad,
-                                GST_DEBUG_FUNCPTR (
-                                  clutter_gst_auto_video_sink_get_caps));
-  gst_pad_set_acceptcaps_function (bin->sink_pad,
-                                   GST_DEBUG_FUNCPTR (
-                                     clutter_gst_auto_video_sink_accept_caps));
+                                  clutter_gst_auto_video_sink_query));
   gst_element_add_pad (GST_ELEMENT (bin), bin->sink_pad);
   /* Setup the element */
-  GST_OBJECT_FLAG_SET (GST_OBJECT (bin), GST_ELEMENT_IS_SINK);
+  GST_OBJECT_FLAG_SET (GST_OBJECT (bin), GST_ELEMENT_FLAG_SINK);
   bin->lock = g_mutex_new ();
   return;
 }

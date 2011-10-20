@@ -57,16 +57,12 @@
 #include <gst/gstvalue.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
-#include <gst/interfaces/navigation.h>
+#include <gst/video/navigation.h>
 #include <gst/riff/riff-ids.h>
 
 #ifdef HAVE_HW_DECODER_SUPPORT
 #define GST_USE_UNSTABLE_API 1
-#include <gst/video/gstsurfacebuffer.h>
-#endif
-
-#if defined (CLUTTER_WINDOWING_X11)
-#include <X11/Xlib.h>
+#include <gst/video/gstsurfacemeta.h>
 #endif
 
 #include <glib.h>
@@ -116,19 +112,16 @@ static gchar *yv12_to_rgba_shader = \
      FRAGMENT_SHADER_END
      "}";
 
-#define BASE_SINK_CAPS GST_VIDEO_CAPS_YUV("AYUV") ";" \
-                       GST_VIDEO_CAPS_YUV("YV12") ";" \
-                       GST_VIDEO_CAPS_YUV("I420") ";" \
-                       GST_VIDEO_CAPS_RGBA        ";" \
-                       GST_VIDEO_CAPS_BGRA        ";" \
-                       GST_VIDEO_CAPS_RGB         ";" \
-                       GST_VIDEO_CAPS_BGR
+#define BASE_SINK_CAPS "{ AYUV," \
+                       "YV12," \
+                       "I420," \
+                       "RGBA," \
+                       "BGRA," \
+                       "RGB," \
+                       "BGR }"
 
-#ifdef HAVE_HW_DECODER_SUPPORT
-#define SINK_CAPS GST_VIDEO_CAPS_SURFACE ", opengl = true;" BASE_SINK_CAPS
-#else
-#define SINK_CAPS BASE_SINK_CAPS
-#endif
+
+#define SINK_CAPS GST_VIDEO_CAPS_MAKE(BASE_SINK_CAPS)
 
 static GstStaticPadTemplate sinktemplate_all
  = GST_STATIC_PAD_TEMPLATE ("sink",
@@ -139,13 +132,6 @@ static GstStaticPadTemplate sinktemplate_all
 GST_DEBUG_CATEGORY_STATIC (clutter_gst_video_sink_debug);
 #define GST_CAT_DEFAULT clutter_gst_video_sink_debug
 
-static GstElementDetails clutter_gst_video_sink_details =
-  GST_ELEMENT_DETAILS ("Clutter video sink",
-      "Sink/Video",
-      "Sends video data from a GStreamer pipeline to a Clutter texture",
-      "Jonathan Matthew <jonathan@kaolin.wh9.net>, "
-      "Matthew Allum <mallum@o-hand.com, "
-      "Chris Lord <chris@o-hand.com>");
 
 enum
 {
@@ -246,14 +232,13 @@ struct _ClutterGstVideoSinkPrivate
 #endif
 };
 
-#define GstNavigationClass GstNavigationInterface
-GST_BOILERPLATE_WITH_INTERFACE (ClutterGstVideoSink,
-                                clutter_gst_video_sink,
-                                GstBaseSink,
-                                GST_TYPE_BASE_SINK,
-                                GstNavigation,
-                                GST_TYPE_NAVIGATION,
-                                clutter_gst_navigation);
+static void
+clutter_gst_navigation_interface_init (GstNavigationInterface *iface);
+
+#define clutter_gst_video_sink_parent_class parent_class
+G_DEFINE_TYPE_WITH_CODE (ClutterGstVideoSink, clutter_gst_video_sink, GST_TYPE_BASE_SINK,
+			 G_IMPLEMENT_INTERFACE (GST_TYPE_NAVIGATION,
+						clutter_gst_navigation_interface_init));
 
 static void clutter_gst_video_sink_set_texture (ClutterGstVideoSink *sink,
                                                 ClutterTexture      *texture);
@@ -367,13 +352,10 @@ clutter_gst_parse_caps (GstCaps             *caps,
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   GstCaps                    *intersection;
-  GstStructure               *structure;
-  gboolean                    ret;
-  const GValue               *fps;
-  const GValue               *par;
+  GstVideoInfo		      vinfo;
+  gint               fps_n, fps_d;
+  gint               par_n, par_d;
   gint                        width, height;
-  guint32                     fourcc;
-  int                         red_mask, blue_mask;
   ClutterGstVideoFormat       format;
   gboolean                    bgr;
   ClutterGstRenderer         *renderer;
@@ -384,56 +366,49 @@ clutter_gst_parse_caps (GstCaps             *caps,
 
   gst_caps_unref (intersection);
 
-  structure = gst_caps_get_structure (caps, 0);
+  if (!gst_video_info_from_caps (&vinfo, caps))
+    goto unknown_format;
 
-  ret  = gst_structure_get_int (structure, "width", &width);
-  ret &= gst_structure_get_int (structure, "height", &height);
-  fps  = gst_structure_get_value (structure, "framerate");
-  ret &= (fps != NULL);
+  width  = vinfo.width;
+  height = vinfo.height;
 
-  par  = gst_structure_get_value (structure, "pixel-aspect-ratio");
+  /* We dont yet use fps or pixel aspect into but handy to have */
+  fps_n  = vinfo.fps_n;
+  fps_d  = vinfo.fps_d;
 
-  if (!ret)
-    return FALSE;
+  par_n = vinfo.par_n;
+  par_d = vinfo.par_d;
 
-  ret = gst_structure_get_fourcc (structure, "format", &fourcc);
-  if (ret && (fourcc == GST_MAKE_FOURCC ('Y', 'V', '1', '2')))
-    {
-      format = CLUTTER_GST_YV12;
-    }
-  else if (ret && (fourcc == GST_MAKE_FOURCC ('I', '4', '2', '0')))
-    {
-      format = CLUTTER_GST_I420;
-    }
-  else if (ret && (fourcc == GST_MAKE_FOURCC ('A', 'Y', 'U', 'V')))
-    {
-      format = CLUTTER_GST_AYUV;
-      bgr = FALSE;
-    }
-#ifdef HAVE_HW_DECODER_SUPPORT
-  else if (gst_structure_has_name (structure, GST_VIDEO_CAPS_SURFACE))
-    {
-      format = CLUTTER_GST_SURFACE;
-    }
-#endif
-  else
-    {
-      guint32 mask;
-      gst_structure_get_int (structure, "red_mask", &red_mask);
-      gst_structure_get_int (structure, "blue_mask", &blue_mask);
-
-      mask = red_mask | blue_mask;
-      if (mask < 0x1000000)
-        {
-          format = CLUTTER_GST_RGB24;
-          bgr = ((guint) red_mask == 0xff0000) ? FALSE : TRUE;
-        }
-      else
-        {
-          format = CLUTTER_GST_RGB32;
-          bgr = ((guint) red_mask == 0xff000000) ? FALSE : TRUE;
-        }
-    }
+  switch (vinfo.finfo->format) {
+  case GST_VIDEO_FORMAT_YV12:
+    format = CLUTTER_GST_YV12;
+    break;
+  case GST_VIDEO_FORMAT_I420:
+    format = CLUTTER_GST_I420;
+    break;
+  case GST_VIDEO_FORMAT_AYUV:
+    format = CLUTTER_GST_AYUV;
+    bgr = FALSE;
+    break;
+  case GST_VIDEO_FORMAT_RGB:
+    format = CLUTTER_GST_RGB24;
+    bgr = FALSE;
+    break;
+  case GST_VIDEO_FORMAT_BGR: 
+    format = CLUTTER_GST_RGB24;
+    bgr = TRUE;
+    break;
+  case GST_VIDEO_FORMAT_RGBA:
+    format = CLUTTER_GST_RGB32;
+    bgr = FALSE;
+    break;
+  case GST_VIDEO_FORMAT_BGRA:
+    format = CLUTTER_GST_RGB32;
+    bgr = TRUE;
+    break;
+  default:
+    break;
+  }
 
   /* find a renderer that can display our format */
   renderer = clutter_gst_find_renderer_by_format (sink, format);
@@ -443,27 +418,24 @@ clutter_gst_parse_caps (GstCaps             *caps,
       return FALSE;
     }
 
+  GST_INFO_OBJECT (sink, "using the %s renderer", renderer->name);
+
   if (save)
     {
       priv->width  = width;
       priv->height = height;
 
       /* We dont yet use fps or pixel aspect into but handy to have */
-      priv->fps_n  = gst_value_get_fraction_numerator (fps);
-      priv->fps_d  = gst_value_get_fraction_denominator (fps);
+      priv->fps_n  = fps_n;
+      priv->fps_d  = fps_d;
 
-      if (par)
-        {
-          priv->par_n = gst_value_get_fraction_numerator (par);
-          priv->par_d = gst_value_get_fraction_denominator (par);
+      priv->par_n = par_n;
+      priv->par_d = par_d;
 
-          /* If we happen to use a ClutterGstVideoTexture, now is to good time
-           * to instruct it about the pixel aspect ratio so we can have a
-           * correct natural width/height */
-          ensure_texture_pixel_aspect_ratio (sink);
-        }
-      else
-        priv->par_n = priv->par_d = 1;
+      /* If we happen to use a ClutterGstVideoTexture, now is to good time
+       * to instruct it about the pixel aspect ratio so we can have a
+       * correct natural width/height */
+      ensure_texture_pixel_aspect_ratio (sink);
 
       priv->format = format;
       priv->bgr = bgr;
@@ -473,6 +445,12 @@ clutter_gst_parse_caps (GstCaps             *caps,
     }
 
   return TRUE;
+
+ unknown_format:
+  {
+    GST_WARNING_OBJECT (sink, "Could not figure format of input caps");
+    return FALSE;
+  }
 }
 
 static gboolean
@@ -534,7 +512,8 @@ clutter_gst_source_dispatch (GSource     *source,
 
   if (G_UNLIKELY (gst_source->has_new_caps))
     {
-      GstCaps *caps = GST_BUFFER_CAPS (gst_source->buffer);
+      GstCaps *caps = gst_pad_get_current_caps(
+                  GST_BASE_SINK_PAD((GST_BASE_SINK(gst_source->sink))));
 
       if (priv->renderer)
         priv->renderer->deinit (gst_source->sink);
@@ -783,11 +762,14 @@ clutter_gst_rgb24_upload (ClutterGstVideoSink *sink,
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   CoglPixelFormat format;
   CoglHandle tex;
+  GstMapInfo info;
 
   if (priv->bgr)
     format = COGL_PIXEL_FORMAT_BGR_888;
   else
     format = COGL_PIXEL_FORMAT_RGB_888;
+
+  gst_buffer_map (buffer, &info, GST_MAP_READ);
 
   tex = cogl_texture_new_from_data (priv->width,
                                     priv->height,
@@ -795,7 +777,9 @@ clutter_gst_rgb24_upload (ClutterGstVideoSink *sink,
                                     format,
                                     format,
                                     GST_ROUND_UP_4 (3 * priv->width),
-                                    GST_BUFFER_DATA (buffer));
+                                    info.data);
+
+  gst_buffer_unmap (buffer, &info);
 
   _create_paint_material (sink,
                           tex,
@@ -808,7 +792,7 @@ static ClutterGstRenderer rgb24_renderer =
   "RGB 24",
   CLUTTER_GST_RGB24,
   0,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_RGB ";" GST_VIDEO_CAPS_BGR),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE("{ RGB, BGR }")),
   clutter_gst_rgb_init,
   clutter_gst_dummy_deinit,
   clutter_gst_rgb24_upload,
@@ -825,6 +809,9 @@ clutter_gst_rgb32_upload (ClutterGstVideoSink *sink,
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   CoglPixelFormat format;
   CoglHandle tex;
+  GstMapInfo info;
+
+  gst_buffer_map (buffer, &info, GST_MAP_READ);
 
   if (priv->bgr)
     format = COGL_PIXEL_FORMAT_BGRA_8888;
@@ -837,7 +824,9 @@ clutter_gst_rgb32_upload (ClutterGstVideoSink *sink,
                                     format,
                                     format,
                                     GST_ROUND_UP_4 (4 * priv->width),
-                                    GST_BUFFER_DATA (buffer));
+                                    info.data);
+
+  gst_buffer_unmap (buffer, &info);
 
   _create_paint_material (sink,
                           tex,
@@ -850,7 +839,7 @@ static ClutterGstRenderer rgb32_renderer =
   "RGB 32",
   CLUTTER_GST_RGB32,
   0,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_RGBA ";" GST_VIDEO_CAPS_BGRA),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE("{ RGBA, BGRA }")),
   clutter_gst_rgb_init,
   clutter_gst_dummy_deinit,
   clutter_gst_rgb32_upload,
@@ -870,6 +859,9 @@ clutter_gst_yv12_upload (ClutterGstVideoSink *sink,
   gint y_row_stride  = GST_ROUND_UP_4 (priv->width);
   gint uv_row_stride = GST_ROUND_UP_4 (priv->width / 2);
   CoglHandle y_tex, u_tex, v_tex;
+  GstMapInfo info;
+
+  gst_buffer_map (buffer, &info, GST_MAP_READ);
 
   y_tex = cogl_texture_new_from_data (priv->width,
                                       priv->height,
@@ -877,7 +869,7 @@ clutter_gst_yv12_upload (ClutterGstVideoSink *sink,
                                       COGL_PIXEL_FORMAT_G_8,
                                       COGL_PIXEL_FORMAT_G_8,
                                       y_row_stride,
-                                      GST_BUFFER_DATA (buffer));
+                                      info.data);
 
   u_tex = cogl_texture_new_from_data (priv->width / 2,
                                       priv->height / 2,
@@ -885,7 +877,7 @@ clutter_gst_yv12_upload (ClutterGstVideoSink *sink,
                                       COGL_PIXEL_FORMAT_G_8,
                                       COGL_PIXEL_FORMAT_G_8,
                                       uv_row_stride,
-                                      GST_BUFFER_DATA (buffer) +
+                                      info.data +
                                       (y_row_stride * priv->height));
 
   v_tex = cogl_texture_new_from_data (priv->width / 2,
@@ -894,9 +886,11 @@ clutter_gst_yv12_upload (ClutterGstVideoSink *sink,
                                       COGL_PIXEL_FORMAT_G_8,
                                       COGL_PIXEL_FORMAT_G_8,
                                       uv_row_stride,
-                                      GST_BUFFER_DATA (buffer)
+                                      info.data
                                       + (y_row_stride * priv->height)
                                       + (uv_row_stride * priv->height / 2));
+
+  gst_buffer_unmap (buffer, &info);
 
   _create_paint_material (sink, y_tex, u_tex, v_tex);
 }
@@ -913,7 +907,7 @@ static ClutterGstRenderer yv12_glsl_renderer =
   "YV12 glsl",
   CLUTTER_GST_YV12,
   CLUTTER_GST_GLSL | CLUTTER_GST_MULTI_TEXTURE,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV ("YV12")),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("YV12")),
   clutter_gst_yv12_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -942,7 +936,7 @@ static ClutterGstRenderer yv12_fp_renderer =
   "YV12 fp",
   CLUTTER_GST_YV12,
   CLUTTER_GST_FP | CLUTTER_GST_MULTI_TEXTURE,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV ("YV12")),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("YV12")),
   clutter_gst_yv12_fp_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -967,7 +961,7 @@ static ClutterGstRenderer i420_glsl_renderer =
   "I420 glsl",
   CLUTTER_GST_I420,
   CLUTTER_GST_GLSL | CLUTTER_GST_MULTI_TEXTURE,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV ("I420")),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("I420")),
   clutter_gst_i420_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -997,7 +991,7 @@ static ClutterGstRenderer i420_fp_renderer =
   "I420 fp",
   CLUTTER_GST_I420,
   CLUTTER_GST_FP | CLUTTER_GST_MULTI_TEXTURE,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV ("I420")),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("I420")),
   clutter_gst_i420_fp_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -1023,14 +1017,21 @@ clutter_gst_ayuv_upload (ClutterGstVideoSink *sink,
                          GstBuffer           *buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
-  CoglHandle tex =
+  CoglHandle tex;
+  GstMapInfo info;
+
+  gst_buffer_map (buffer, &info, GST_MAP_READ);
+
+  tex =
     cogl_texture_new_from_data (priv->width,
                                 priv->height,
                                 CLUTTER_GST_TEXTURE_FLAGS,
                                 COGL_PIXEL_FORMAT_RGBA_8888,
                                 COGL_PIXEL_FORMAT_RGBA_8888,
                                 GST_ROUND_UP_4 (4 * priv->width),
-                                GST_BUFFER_DATA (buffer));
+                                info.data);
+
+  gst_buffer_unmap (buffer, &info);
 
   _create_paint_material (sink,
                           tex,
@@ -1043,7 +1044,7 @@ static ClutterGstRenderer ayuv_glsl_renderer =
   "AYUV glsl",
   CLUTTER_GST_AYUV,
   CLUTTER_GST_GLSL,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV ("AYUV")),
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("AYUV")),
   clutter_gst_ayuv_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_ayuv_upload,
@@ -1089,10 +1090,9 @@ clutter_gst_hw_upload (ClutterGstVideoSink *sink,
                        GstBuffer           *buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
-  GstSurfaceBuffer *surface;
+  GstSurfaceMeta *surface = gst_buffer_get_surface_meta (buffer);
 
-  g_return_if_fail (GST_IS_SURFACE_BUFFER (buffer));
-  surface = GST_SURFACE_BUFFER (buffer);
+  g_return_if_fail (surface != NULL);
 
   if (G_UNLIKELY (priv->converter == NULL)) {
     CoglHandle tex;
@@ -1107,11 +1107,11 @@ clutter_gst_hw_upload (ClutterGstVideoSink *sink,
     g_value_init (&value, G_TYPE_UINT);
     g_value_set_uint (&value, gl_texture);
 
-    priv->converter = gst_surface_buffer_create_converter (surface, "opengl", &value);
+    priv->converter = gst_surface_meta_create_converter (surface, "opengl", &value);
     g_return_if_fail (priv->converter);
   }
 
-  gst_surface_converter_upload (priv->converter, surface);
+  gst_surface_converter_upload (priv->converter, buffer);
 
   /* The texture is dirty, schedule a redraw */
   clutter_actor_queue_redraw (CLUTTER_ACTOR (priv->texture));
@@ -1122,7 +1122,7 @@ static ClutterGstRenderer hw_renderer =
   "HW surface",
   CLUTTER_GST_SURFACE,
   0,
-  GST_STATIC_CAPS (GST_VIDEO_CAPS_SURFACE ", opengl=true"),
+  GST_STATIC_CAPS ("x-video/surface, opengl=true"),
   clutter_gst_hw_init,
   clutter_gst_hw_deinit,
   clutter_gst_hw_upload,
@@ -1206,18 +1206,6 @@ clutter_gst_build_caps (GSList *renderers)
   return caps;
 }
 
-static void
-clutter_gst_video_sink_base_init (gpointer g_class)
-{
-  GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-
-  gst_element_class_add_pad_template
-                     (element_class,
-                      gst_static_pad_template_get (&sinktemplate_all));
-
-  gst_element_class_set_details (element_class,
-                                 &clutter_gst_video_sink_details);
-}
 
 static gboolean
 navigation_event (ClutterActor        *actor,
@@ -1283,8 +1271,7 @@ navigation_event (ClutterActor        *actor,
 }
 
 static void
-clutter_gst_video_sink_init (ClutterGstVideoSink      *sink,
-                             ClutterGstVideoSinkClass *klass)
+clutter_gst_video_sink_init (ClutterGstVideoSink      *sink)
 {
   ClutterGstVideoSinkPrivate *priv;
 
@@ -1335,7 +1322,7 @@ clutter_gst_video_sink_render (GstBaseSink *bsink,
 }
 
 static GstCaps *
-clutter_gst_video_sink_get_caps (GstBaseSink *bsink)
+clutter_gst_video_sink_get_caps (GstBaseSink *bsink, GstCaps *filter)
 {
   ClutterGstVideoSink *sink;
 
@@ -1362,6 +1349,7 @@ clutter_gst_video_sink_set_caps (GstBaseSink *bsink,
 
   return TRUE;
 }
+
 
 static void
 clutter_gst_video_sink_dispose (GObject *object)
@@ -1525,6 +1513,7 @@ static void
 clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  GstElementClass *gstelement_class = GST_ELEMENT_CLASS (klass);
   GstBaseSinkClass *gstbase_sink_class = GST_BASE_SINK_CLASS (klass);
   GParamSpec *pspec;
 
@@ -1540,6 +1529,17 @@ clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass *klass)
 
   gobject_class->dispose = clutter_gst_video_sink_dispose;
   gobject_class->finalize = clutter_gst_video_sink_finalize;
+
+  gst_element_class_add_pad_template (gstelement_class,
+                      gst_static_pad_template_get (&sinktemplate_all));
+
+  gst_element_class_set_details_simple (gstelement_class,
+      "Clutter video sink",
+      "Sink/Video",
+      "Sends video data from a GStreamer pipeline to a Clutter texture",
+      "Jonathan Matthew <jonathan@kaolin.wh9.net>, "
+      "Matthew Allum <mallum@o-hand.com, "
+      "Chris Lord <chris@o-hand.com>");
 
   gstbase_sink_class->render = clutter_gst_video_sink_render;
   gstbase_sink_class->preroll = clutter_gst_video_sink_render;
@@ -1624,16 +1624,24 @@ clutter_gst_navigation_send_event (GstNavigation *navigation,
     }
 }
 
-static gboolean
-clutter_gst_navigation_supported (ClutterGstVideoSink *object, GType type)
-{
-  g_assert (type == GST_TYPE_NAVIGATION);
-  return TRUE;
-}
-
-
 static void
 clutter_gst_navigation_interface_init (GstNavigationInterface *iface)
 {
   iface->send_event = clutter_gst_navigation_send_event;
+}
+
+gboolean
+_internal_plugin_init (GstPlugin *plugin)
+{
+  gboolean ret = gst_element_register (plugin,
+                                             "cluttersink",
+                                       GST_RANK_PRIMARY,
+                                       CLUTTER_GST_TYPE_VIDEO_SINK);
+
+  GST_DEBUG_CATEGORY_INIT (clutter_gst_video_sink_debug,
+			   "cluttersink",
+			   0,
+			   "clutter video sink");
+
+  return ret;
 }

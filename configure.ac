@@ -80,8 +80,8 @@ AC_SUBST([CLUTTER_GST_RELEASE_STATUS], [clutter_gst_release_status])
 # pkg-config requirements
 GLIB_REQ_VERSION=2.18.0
 CLUTTER_REQ_VERSION=1.6.0
-GSTREAMER_REQ_VERSION=0.10.26
-GST_PLUGINS_BAD_REQ_VERSION=0.10.22.1
+GSTREAMER_REQ_VERSION=0.11.0
+GST_PLUGINS_BAD_REQ_VERSION=0.11.0
 
 AC_SUBST(GLIB_REQ_VERSION)
 AC_SUBST(CLUTTER_REQ_VERSION)
@@ -144,13 +144,12 @@ PKG_CHECK_MODULES(CLUTTER_GST,
 
 dnl ========================================================================
 
-GST_MAJORMINOR=0.10
+GST_MAJORMINOR=1.0
 
 PKG_CHECK_MODULES(GST,
                   [gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION
                    gstreamer-plugins-base-$GST_MAJORMINOR
                    gstreamer-base-$GST_MAJORMINOR
-                   gstreamer-interfaces-$GST_MAJORMINOR
                    gstreamer-video-$GST_MAJORMINOR
                    gstreamer-audio-$GST_MAJORMINOR
                    gstreamer-tag-$GST_MAJORMINOR])
@@ -160,7 +159,8 @@ PKG_CHECK_MODULES([PLUGIN],
                   [clutter-1.0 >= $CLUTTER_REQ_VERSION
                    gstreamer-$GST_MAJORMINOR >= $GSTREAMER_REQ_VERSION
                    gstreamer-base-$GST_MAJORMINOR
-                   gstreamer-interfaces-$GST_MAJORMINOR ])
+                   gstreamer-video-$GST_MAJORMINOR
+                   gstreamer-audio-$GST_MAJORMINOR])
 
 dnl define location of gstreamer plugin directory
 plugindir="\$(libdir)/gstreamer-$GST_MAJORMINOR"
@@ -285,6 +285,7 @@ GOBJECT_INTROSPECTION_CHECK([0.6.8])
 dnl ========================================================================
 
 AC_SUBST(GCC_FLAGS)
+GST_CFLAGS="$GST_CFLAGS -DGST_USE_UNSTABLE_API"
 AC_SUBST(GST_CFLAGS)
 AC_SUBST(GST_LIBS)
 

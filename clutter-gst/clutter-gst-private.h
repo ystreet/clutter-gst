@@ -44,6 +44,9 @@ G_BEGIN_DECLS
 #define CLUTTER_GST_PARAM_READWRITE     \
   (G_PARAM_READABLE | G_PARAM_WRITABLE | CLUTTER_GST_PARAM_STATIC)
 
+gboolean
+_internal_plugin_init (GstPlugin *plugin);
+
 G_END_DECLS
 
 #endif /* __CLUTTER_GST_PRIVATE_H__ */

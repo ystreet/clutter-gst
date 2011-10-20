@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include <glib/gprintf.h>
+#include <gst/video/video.h>
 #include <clutter-gst/clutter-gst.h>
 
 static gint   opt_framerate = 30;
@@ -111,6 +112,7 @@ main (int argc, char *argv[])
   GstElement       *capsfilter;
   GstElement       *sink;
   GstCaps          *caps;
+  GstVideoFormat    format;
 
   if (!g_thread_supported ())
     g_thread_init (NULL);
@@ -152,17 +154,16 @@ main (int argc, char *argv[])
   sink = gst_element_factory_make ("cluttersink", NULL);
   g_object_set (sink, "texture", CLUTTER_TEXTURE (texture), NULL);
 
-  /* make videotestsrc spit the format we want */
-  caps = gst_caps_new_simple ("video/x-raw-rgb",
-                              "bpp", G_TYPE_INT, opt_bpp,
-                              "depth", G_TYPE_INT, opt_depth,
-                              "framerate", GST_TYPE_FRACTION, opt_framerate, 1,
-#if 0
-                              "red_mask", G_TYPE_INT, 0xff000000,
-                              "green_mask", G_TYPE_INT, 0x00ff0000,
-                              "blue_mask", G_TYPE_INT, 0x0000ff00,
-#endif
-                              NULL);
+  format = gst_video_format_from_masks(opt_depth, opt_bpp, G_BIG_ENDIAN,
+				       0xff0000,
+				       0x00ff00,
+				       0x0000ff,
+				       0x00000000);
+
+  caps = gst_caps_new_simple ("video/x-raw",
+			      "format", G_TYPE_STRING, gst_video_format_to_string(format),
+			      "framerate", GST_TYPE_FRACTION, opt_framerate, 1,
+			      NULL);
   g_object_set (capsfilter, "caps", caps, NULL);
 
   g_printf ("%s: [caps] %s\n", __FILE__, gst_caps_to_string (caps));
