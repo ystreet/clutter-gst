@@ -167,7 +167,8 @@ typedef struct _ClutterGstSource
   GSource              source;
 
   ClutterGstVideoSink *sink;
-  GMutex              *buffer_lock;   /* mutex for the buffer */
+  GCond               *render_cond;   /* Condition for the rendering */
+  GMutex              *render_lock;   /* mutex for the rendering */
   GstBuffer           *buffer;
   gboolean             has_new_caps;
 } ClutterGstSource;
@@ -254,7 +255,8 @@ clutter_gst_source_new (ClutterGstVideoSink *sink)
   g_source_set_priority (source, priv->priority);
 
   gst_source->sink = sink;
-  gst_source->buffer_lock = g_mutex_new ();
+  gst_source->render_cond = g_cond_new ();
+  gst_source->render_lock = g_mutex_new ();
   gst_source->buffer = NULL;
 
   return gst_source;
@@ -265,27 +267,13 @@ clutter_gst_source_finalize (GSource *source)
 {
   ClutterGstSource *gst_source = (ClutterGstSource *) source;
 
-  g_mutex_lock (gst_source->buffer_lock);
+  g_mutex_lock (gst_source->render_lock);
   if (gst_source->buffer)
     gst_buffer_unref (gst_source->buffer);
   gst_source->buffer = NULL;
-  g_mutex_unlock (gst_source->buffer_lock);
-  g_mutex_free (gst_source->buffer_lock);
-}
-
-static void
-clutter_gst_source_push (ClutterGstSource *gst_source,
-                         GstBuffer        *buffer)
-{
-  ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
-
-  g_mutex_lock (gst_source->buffer_lock);
-  if (gst_source->buffer)
-    gst_buffer_unref (gst_source->buffer);
-  gst_source->buffer = gst_buffer_ref (buffer);
-  g_mutex_unlock (gst_source->buffer_lock);
-
-  g_main_context_wakeup (priv->clutter_main_context);
+  g_mutex_unlock (gst_source->render_lock);
+  g_cond_free (gst_source->render_cond);
+  g_mutex_free (gst_source->render_lock);
 }
 
 static gboolean
@@ -455,31 +443,32 @@ clutter_gst_source_dispatch (GSource     *source,
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
   GstBuffer *buffer;
 
-  g_mutex_lock (gst_source->buffer_lock);
-
-  if (G_UNLIKELY (gst_source->has_new_caps))
-    {
-      GstCaps *caps = GST_BUFFER_CAPS (gst_source->buffer);
-
-      if (priv->renderer)
-        priv->renderer->deinit (gst_source->sink);
-
-      clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
-      gst_source->has_new_caps = FALSE;
-
-      priv->renderer->init (gst_source->sink);
-    }
+  g_mutex_lock (gst_source->render_lock);
 
   buffer = gst_source->buffer;
   gst_source->buffer = NULL;
 
-  g_mutex_unlock (gst_source->buffer_lock);
-
   if (buffer)
     {
+      if (G_UNLIKELY (gst_source->has_new_caps))
+      {
+        GstCaps *caps = GST_BUFFER_CAPS (buffer);
+
+        if (priv->renderer)
+          priv->renderer->deinit (gst_source->sink);
+
+        clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+        gst_source->has_new_caps = FALSE;
+
+        priv->renderer->init (gst_source->sink);
+      }
+
       priv->renderer->upload (gst_source->sink, buffer);
       gst_buffer_unref (buffer);
     }
+
+  g_cond_signal (gst_source->render_cond);
+  g_mutex_unlock (gst_source->render_lock);
 
   return TRUE;
 }
@@ -1120,9 +1109,19 @@ static GstFlowReturn
 clutter_gst_video_sink_render (GstBaseSink *bsink,
                                GstBuffer   *buffer)
 {
-  ClutterGstVideoSink *sink = CLUTTER_GST_VIDEO_SINK (bsink);
+  ClutterGstVideoSinkPrivate *priv = CLUTTER_GST_VIDEO_SINK (bsink)->priv;
+  ClutterGstSource *gst_source = priv->source;
 
-  clutter_gst_source_push (sink->priv->source, buffer);
+  g_mutex_lock (gst_source->render_lock);
+
+  if (gst_source->buffer)
+    gst_buffer_unref (gst_source->buffer);
+  gst_source->buffer = gst_buffer_ref (buffer);
+
+  g_main_context_wakeup (priv->clutter_main_context);
+
+  g_cond_wait (gst_source->render_cond, gst_source->render_lock);
+  g_mutex_unlock (gst_source->render_lock);
 
   return GST_FLOW_OK;
 }
@@ -1149,9 +1148,28 @@ clutter_gst_video_sink_set_caps (GstBaseSink *bsink,
   if (!clutter_gst_parse_caps (caps, sink, FALSE))
     return FALSE;
 
-  g_mutex_lock (priv->source->buffer_lock);
+  g_mutex_lock (priv->source->render_lock);
   priv->source->has_new_caps = TRUE;
-  g_mutex_unlock (priv->source->buffer_lock);
+  g_mutex_unlock (priv->source->render_lock);
+
+  return TRUE;
+}
+
+static gboolean
+clutter_gst_video_sink_unlock (GstBaseSink *bsink)
+{
+  ClutterGstVideoSinkPrivate *priv = CLUTTER_GST_VIDEO_SINK (bsink)->priv;
+  ClutterGstSource *gst_source = priv->source;
+
+  g_mutex_lock (gst_source->render_lock);
+
+  if (gst_source->buffer) {
+    gst_buffer_unref (gst_source->buffer);
+    gst_source->buffer = NULL;
+  }
+
+  g_cond_signal (gst_source->render_cond);
+  g_mutex_unlock (gst_source->render_lock);
 
   return TRUE;
 }
@@ -1335,6 +1353,7 @@ clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass *klass)
   gstbase_sink_class->stop = clutter_gst_video_sink_stop;
   gstbase_sink_class->set_caps = clutter_gst_video_sink_set_caps;
   gstbase_sink_class->get_caps = clutter_gst_video_sink_get_caps;
+  gstbase_sink_class->unlock = clutter_gst_video_sink_unlock;
 
   /**
    * ClutterGstVideoSink:texture:
