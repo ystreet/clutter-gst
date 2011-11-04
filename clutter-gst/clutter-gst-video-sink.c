@@ -169,6 +169,7 @@ typedef struct _ClutterGstSource
   ClutterGstVideoSink *sink;
   GMutex              *buffer_lock;   /* mutex for the buffer */
   GstBuffer           *buffer;
+  gboolean             has_new_caps;
 } ClutterGstSource;
 
 /*
@@ -217,7 +218,6 @@ struct _ClutterGstVideoSinkPrivate
   GSList                  *renderers;
   GstCaps                 *caps;
   ClutterGstRenderer      *renderer;
-  ClutterGstRendererState  renderer_state;
 
   GArray                  *signal_handler_ids;
 };
@@ -307,6 +307,145 @@ clutter_gst_source_check (GSource *source)
   return gst_source->buffer != NULL;
 }
 
+static ClutterGstRenderer *
+clutter_gst_find_renderer_by_format (ClutterGstVideoSink  *sink,
+                                     ClutterGstVideoFormat format)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  ClutterGstRenderer *renderer = NULL;
+  GSList *element;
+
+  for (element = priv->renderers; element; element = g_slist_next(element))
+    {
+      ClutterGstRenderer *candidate = (ClutterGstRenderer *)element->data;
+
+      if (candidate->format == format)
+        {
+          renderer = candidate;
+          break;
+        }
+    }
+
+  return renderer;
+}
+
+static gboolean
+clutter_gst_parse_caps (GstCaps             *caps,
+                        ClutterGstVideoSink *sink,
+                        gboolean             save)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  GstCaps                    *intersection;
+  GstStructure               *structure;
+  gboolean                    ret;
+  const GValue               *fps;
+  const GValue               *par;
+  gint                        width, height;
+  guint32                     fourcc;
+  int                         red_mask, blue_mask;
+  ClutterGstVideoFormat       format;
+  gboolean                    bgr;
+  ClutterGstRenderer         *renderer;
+
+  intersection = gst_caps_intersect (priv->caps, caps);
+  if (gst_caps_is_empty (intersection))
+    return FALSE;
+
+  gst_caps_unref (intersection);
+
+  structure = gst_caps_get_structure (caps, 0);
+
+  ret  = gst_structure_get_int (structure, "width", &width);
+  ret &= gst_structure_get_int (structure, "height", &height);
+  fps  = gst_structure_get_value (structure, "framerate");
+  ret &= (fps != NULL);
+
+  par  = gst_structure_get_value (structure, "pixel-aspect-ratio");
+
+  if (!ret)
+    return FALSE;
+
+  ret = gst_structure_get_fourcc (structure, "format", &fourcc);
+  if (ret && (fourcc == GST_MAKE_FOURCC ('Y', 'V', '1', '2')))
+    {
+      format = CLUTTER_GST_YV12;
+    }
+  else if (ret && (fourcc == GST_MAKE_FOURCC ('I', '4', '2', '0')))
+    {
+      format = CLUTTER_GST_I420;
+    }
+  else if (ret && (fourcc == GST_MAKE_FOURCC ('A', 'Y', 'U', 'V')))
+    {
+      format = CLUTTER_GST_AYUV;
+      bgr = FALSE;
+    }
+  else
+    {
+      guint32 mask;
+      gst_structure_get_int (structure, "red_mask", &red_mask);
+      gst_structure_get_int (structure, "blue_mask", &blue_mask);
+
+      mask = red_mask | blue_mask;
+      if (mask < 0x1000000)
+        {
+          format = CLUTTER_GST_RGB24;
+          bgr = ((guint) red_mask == 0xff0000) ? FALSE : TRUE;
+        }
+      else
+        {
+          format = CLUTTER_GST_RGB32;
+          bgr = ((guint) red_mask == 0xff000000) ? FALSE : TRUE;
+        }
+    }
+
+  /* find a renderer that can display our format */
+  renderer = clutter_gst_find_renderer_by_format (sink, format);
+  if (G_UNLIKELY (renderer == NULL))
+    {
+      GST_ERROR_OBJECT (sink, "could not find a suitable renderer");
+      return FALSE;
+    }
+
+  if (save)
+    {
+      priv->width  = width;
+      priv->height = height;
+
+      /* We dont yet use fps or pixel aspect into but handy to have */
+      priv->fps_n  = gst_value_get_fraction_numerator (fps);
+      priv->fps_d  = gst_value_get_fraction_denominator (fps);
+
+      if (par)
+        {
+          GParamSpec *pspec;
+
+          /* If we happen to use a ClutterGstVideoTexture, now is to good time to
+           * instruct it about the pixel aspect ratio so we can have a correct
+           * natural width/height */
+          pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->texture),
+              "pixel-aspect-ratio");
+          if (pspec)
+            {
+              g_object_set_property (G_OBJECT(priv->texture),
+                  "pixel-aspect-ratio", par);
+            }
+
+          priv->par_n = gst_value_get_fraction_numerator (par);
+          priv->par_d = gst_value_get_fraction_denominator (par);
+        }
+      else
+        priv->par_n = priv->par_d = 1;
+
+      priv->format = format;
+      priv->bgr = bgr;
+
+      priv->renderer = renderer;
+      GST_INFO_OBJECT (sink, "using the %s renderer", priv->renderer->name);
+    }
+
+  return TRUE;
+}
+
 static gboolean
 clutter_gst_source_dispatch (GSource     *source,
                              GSourceFunc  callback,
@@ -316,22 +455,24 @@ clutter_gst_source_dispatch (GSource     *source,
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
   GstBuffer *buffer;
 
-  /* The initialization / free functions of the renderers have to be called in
-   * the clutter thread (OpenGL context) */
-  if (G_UNLIKELY (priv->renderer_state == CLUTTER_GST_RENDERER_NEED_GC))
+  g_mutex_lock (gst_source->buffer_lock);
+
+  if (G_UNLIKELY (gst_source->has_new_caps))
     {
-      priv->renderer->deinit (gst_source->sink);
-      priv->renderer_state = CLUTTER_GST_RENDERER_STOPPED;
-    }
-  if (G_UNLIKELY (priv->renderer_state == CLUTTER_GST_RENDERER_STOPPED))
-    {
+      GstCaps *caps = GST_BUFFER_CAPS (gst_source->buffer);
+
+      if (priv->renderer)
+        priv->renderer->deinit (gst_source->sink);
+
+      clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+      gst_source->has_new_caps = FALSE;
+
       priv->renderer->init (gst_source->sink);
-      priv->renderer_state = CLUTTER_GST_RENDERER_RUNNING;
     }
 
-  g_mutex_lock (gst_source->buffer_lock);
   buffer = gst_source->buffer;
   gst_source->buffer = NULL;
+
   g_mutex_unlock (gst_source->buffer_lock);
 
   if (buffer)
@@ -878,28 +1019,6 @@ clutter_gst_build_caps (GSList *renderers)
   return caps;
 }
 
-static ClutterGstRenderer *
-clutter_gst_find_renderer_by_format (ClutterGstVideoSink  *sink,
-                                     ClutterGstVideoFormat format)
-{
-  ClutterGstVideoSinkPrivate *priv = sink->priv;
-  ClutterGstRenderer *renderer = NULL;
-  GSList *element;
-
-  for (element = priv->renderers; element; element = g_slist_next(element))
-    {
-      ClutterGstRenderer *candidate = (ClutterGstRenderer *)element->data;
-
-      if (candidate->format == format)
-        {
-          renderer = candidate;
-          break;
-        }
-    }
-
-  return renderer;
-}
-
 static void
 clutter_gst_video_sink_base_init (gpointer g_class)
 {
@@ -992,7 +1111,6 @@ clutter_gst_video_sink_init (ClutterGstVideoSink      *sink,
 
   priv->renderers = clutter_gst_build_renderers_list ();
   priv->caps = clutter_gst_build_caps (priv->renderers);
-  priv->renderer_state = CLUTTER_GST_RENDERER_STOPPED;
 
   priv->signal_handler_ids = g_array_new (FALSE, TRUE, sizeof (gulong));
   priv->priority = CLUTTER_GST_DEFAULT_PRIORITY;
@@ -1024,105 +1142,16 @@ clutter_gst_video_sink_set_caps (GstBaseSink *bsink,
 {
   ClutterGstVideoSink        *sink;
   ClutterGstVideoSinkPrivate *priv;
-  GstCaps                    *intersection;
-  GstStructure               *structure;
-  gboolean                    ret;
-  const GValue               *fps;
-  const GValue               *par;
-  gint                        width, height;
-  guint32                     fourcc;
-  int                         red_mask, blue_mask;
 
   sink = CLUTTER_GST_VIDEO_SINK(bsink);
   priv = sink->priv;
 
-  intersection = gst_caps_intersect (priv->caps, caps);
-  if (gst_caps_is_empty (intersection))
+  if (!clutter_gst_parse_caps (caps, sink, FALSE))
     return FALSE;
 
-  gst_caps_unref (intersection);
-
-  structure = gst_caps_get_structure (caps, 0);
-
-  ret  = gst_structure_get_int (structure, "width", &width);
-  ret &= gst_structure_get_int (structure, "height", &height);
-  fps  = gst_structure_get_value (structure, "framerate");
-  ret &= (fps != NULL);
-
-  par  = gst_structure_get_value (structure, "pixel-aspect-ratio");
-
-  if (!ret)
-    return FALSE;
-
-  priv->width  = width;
-  priv->height = height;
-
-  /* We dont yet use fps or pixel aspect into but handy to have */
-  priv->fps_n  = gst_value_get_fraction_numerator (fps);
-  priv->fps_d  = gst_value_get_fraction_denominator (fps);
-
-  if (par)
-    {
-      GParamSpec *pspec;
-
-      /* If we happen to use a ClutterGstVideoTexture, now is to good time to
-       * instruct it about the pixel aspect ratio so we can have a correct
-       * natural width/height */
-      pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->texture),
-          "pixel-aspect-ratio");
-      if (pspec)
-        {
-          g_object_set_property (G_OBJECT(priv->texture),
-              "pixel-aspect-ratio", par);
-        }
-      priv->par_n = gst_value_get_fraction_numerator (par);
-      priv->par_d = gst_value_get_fraction_denominator (par);
-    }
-  else
-    priv->par_n = priv->par_d = 1;
-
-  ret = gst_structure_get_fourcc (structure, "format", &fourcc);
-  if (ret && (fourcc == GST_MAKE_FOURCC ('Y', 'V', '1', '2')))
-    {
-      priv->format = CLUTTER_GST_YV12;
-    }
-  else if (ret && (fourcc == GST_MAKE_FOURCC ('I', '4', '2', '0')))
-    {
-      priv->format = CLUTTER_GST_I420;
-    }
-  else if (ret && (fourcc == GST_MAKE_FOURCC ('A', 'Y', 'U', 'V')))
-    {
-      priv->format = CLUTTER_GST_AYUV;
-      priv->bgr = FALSE;
-    }
-  else
-    {
-      guint32 mask;
-      gst_structure_get_int (structure, "red_mask", &red_mask);
-      gst_structure_get_int (structure, "blue_mask", &blue_mask);
-
-      mask = red_mask | blue_mask;
-      if (mask < 0x1000000)
-        {
-          priv->format = CLUTTER_GST_RGB24;
-          priv->bgr = ((guint) red_mask == 0xff0000) ? FALSE : TRUE;
-        }
-      else
-        {
-          priv->format = CLUTTER_GST_RGB32;
-          priv->bgr = ((guint) red_mask == 0xff000000) ? FALSE : TRUE;
-        }
-    }
-
-  /* find a renderer that can display our format */
-  priv->renderer = clutter_gst_find_renderer_by_format (sink, priv->format);
-  if (G_UNLIKELY (priv->renderer == NULL))
-    {
-      GST_ERROR_OBJECT (sink, "could not find a suitable renderer");
-      return FALSE;
-    }
-
-  GST_INFO_OBJECT (sink, "using the %s renderer", priv->renderer->name);
+  g_mutex_lock (priv->source->buffer_lock);
+  priv->source->has_new_caps = TRUE;
+  g_mutex_unlock (priv->source->buffer_lock);
 
   return TRUE;
 }
@@ -1136,11 +1165,10 @@ clutter_gst_video_sink_dispose (GObject *object)
   self = CLUTTER_GST_VIDEO_SINK (object);
   priv = self->priv;
 
-  if (priv->renderer_state == CLUTTER_GST_RENDERER_RUNNING ||
-      priv->renderer_state == CLUTTER_GST_RENDERER_NEED_GC)
+  if (priv->renderer)
     {
       priv->renderer->deinit (self);
-      priv->renderer_state = CLUTTER_GST_RENDERER_STOPPED;
+      priv->renderer = NULL;
     }
 
   if (priv->texture)
@@ -1282,8 +1310,6 @@ clutter_gst_video_sink_stop (GstBaseSink *base_sink)
       g_source_unref (source);
       priv->source = NULL;
     }
-
-  priv->renderer_state = CLUTTER_GST_RENDERER_STOPPED;
 
   return TRUE;
 }
