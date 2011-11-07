@@ -43,6 +43,7 @@
 #endif
 
 #include "clutter-gst-video-sink.h"
+#include "clutter-gst-util.h"
 #include "clutter-gst-private.h"
 #include "clutter-gst-shaders.h"
 
@@ -1560,6 +1561,10 @@ clutter_gst_navigation_interface_init (GstNavigationInterface *iface)
 static gboolean
 plugin_init (GstPlugin *plugin)
 {
+  /* We must enshure that clutter is initialized */
+  if (clutter_gst_init (NULL, NULL) != CLUTTER_INIT_SUCCESS)
+    return FALSE;
+
   return gst_element_register (plugin,
 			       "cluttersink",
 			       GST_RANK_NONE,
