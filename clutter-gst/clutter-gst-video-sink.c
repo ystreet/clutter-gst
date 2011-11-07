@@ -537,7 +537,9 @@ clutter_gst_source_dispatch (GSource     *source,
         if (!priv->texture)
           {
             ClutterActor *stage = clutter_stage_get_default ();
-            ClutterActor *actor = clutter_texture_new ();
+            ClutterActor *actor = g_object_new (CLUTTER_TYPE_TEXTURE,
+                                                "disable-slicing", TRUE,
+                                                NULL);
 
             priv->texture = CLUTTER_TEXTURE (actor);
             clutter_stage_set_user_resizable (CLUTTER_STAGE (stage), TRUE);
