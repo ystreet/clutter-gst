@@ -120,7 +120,7 @@ static gchar *yv12_to_rgba_shader = \
                        GST_VIDEO_CAPS_BGR
 
 #ifdef HAVE_HW_DECODER_SUPPORT
-#define SINK_CAPS GST_VIDEO_CAPS_SURFACE ";" BASE_SINK_CAPS
+#define SINK_CAPS GST_VIDEO_CAPS_SURFACE ", opengl = true;" BASE_SINK_CAPS
 #else
 #define SINK_CAPS BASE_SINK_CAPS
 #endif
