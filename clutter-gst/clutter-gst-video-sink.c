@@ -538,6 +538,7 @@ clutter_gst_source_dispatch (GSource     *source,
             priv->texture = CLUTTER_TEXTURE (actor);
             clutter_stage_set_user_resizable (CLUTTER_STAGE (stage), TRUE);
             clutter_container_add_actor (CLUTTER_CONTAINER (stage), actor);
+            clutter_stage_set_no_clear_hint (CLUTTER_STAGE (stage), TRUE);
 
             g_signal_connect (stage, "delete-event",
                 G_CALLBACK (on_stage_destroyed), gst_source);
