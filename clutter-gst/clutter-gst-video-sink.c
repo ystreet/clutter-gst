@@ -65,6 +65,10 @@
 #include <gst/video/gstsurfacebuffer.h>
 #endif
 
+#if CLUTTER_WINDOWING_X11
+#include <X11/Xlib.h>
+#endif
+
 #include <glib.h>
 #include <string.h>
 
@@ -1640,8 +1644,14 @@ clutter_gst_navigation_interface_init (GstNavigationInterface *iface)
 static gboolean
 plugin_init (GstPlugin *plugin)
 {
+
+#if CLUTTER_WINDOWING_X11
+  /* Required by some GStreamer element like VA */
+  XInitThreads ();
+#endif
+
   /* We must enshure that clutter is initialized */
-  if (clutter_gst_init (NULL, NULL) != CLUTTER_INIT_SUCCESS)
+  if (clutter_init (NULL, NULL) != CLUTTER_INIT_SUCCESS)
     return FALSE;
 
   return gst_element_register (plugin,

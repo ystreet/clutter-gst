@@ -109,7 +109,6 @@ plugin_LTLIBRARIES = libgstclutter.la
 libgstclutter_la_LIBADD  = $(PLUGIN_LIBS) $(HW_LIBS)
 libgstclutter_la_LDFLAGS =	\
 	$(GL_LDFLAGS)		\
-	libclutter-gst-1.0.la \
 	-module -avoid-version	\
 	-no-undefined		\
 	$(NULL)
