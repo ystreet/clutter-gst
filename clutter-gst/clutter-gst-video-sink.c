@@ -186,6 +186,7 @@ typedef struct _ClutterGstSource
   GMutex              *render_lock;   /* mutex for the rendering */
   GstBuffer           *buffer;
   gboolean             has_new_caps;
+  gboolean             stage_lost;
 } ClutterGstSource;
 
 /*
@@ -460,6 +461,53 @@ clutter_gst_parse_caps (GstCaps             *caps,
 }
 
 static gboolean
+on_stage_destroyed (ClutterStage *stage,
+                    ClutterEvent *event,
+                    gpointer      user_data)
+{
+  ClutterGstSource *gst_source = user_data;
+  ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
+
+  g_mutex_lock (gst_source->render_lock);
+
+  clutter_actor_hide (CLUTTER_ACTOR (stage));
+  clutter_container_remove_actor (CLUTTER_CONTAINER (stage),
+      CLUTTER_ACTOR (priv->texture));
+
+  if (gst_source->buffer)
+    gst_buffer_unref (gst_source->buffer);
+
+  gst_source->stage_lost = TRUE;
+  gst_source->buffer = NULL;
+  priv->texture = NULL;
+
+  g_cond_signal (gst_source->render_cond);
+  g_mutex_unlock (gst_source->render_lock);
+
+  return TRUE;
+}
+
+static void
+on_stage_allocation_changed (ClutterStage          *stage,
+                             ClutterActorBox       *box,
+                             ClutterAllocationFlags flags,
+                             gpointer               user_data)
+{
+  ClutterGstSource *gst_source = user_data;
+  ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
+  gint width, height;
+
+  if (gst_source->stage_lost)
+    return;
+
+  width = (gint) (box->x2 - box->x1);
+  height = (gint) (box->y2 - box->y1);
+
+  GST_DEBUG ("Size changed to %i/%i", width, height);
+  clutter_actor_set_size (CLUTTER_ACTOR (priv->texture), width, height);
+}
+
+static gboolean
 clutter_gst_source_dispatch (GSource     *source,
                              GSourceFunc  callback,
                              gpointer     user_data)
@@ -482,10 +530,31 @@ clutter_gst_source_dispatch (GSource     *source,
         if (priv->renderer)
           priv->renderer->deinit (gst_source->sink);
 
-        clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
-        gst_source->has_new_caps = FALSE;
+        if (!priv->texture)
+          {
+            ClutterActor *stage = clutter_stage_get_default ();
+            ClutterActor *actor = clutter_texture_new ();
+
+            priv->texture = CLUTTER_TEXTURE (actor);
+            clutter_stage_set_user_resizable (CLUTTER_STAGE (stage), TRUE);
+            clutter_container_add_actor (CLUTTER_CONTAINER (stage), actor);
+
+            g_signal_connect (stage, "delete-event",
+                G_CALLBACK (on_stage_destroyed), gst_source);
+            g_signal_connect (stage, "allocation-changed",
+                G_CALLBACK (on_stage_allocation_changed), gst_source);
+
+            clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+            clutter_actor_set_size (stage, priv->width, priv->height);
+            clutter_actor_show (stage);
+          }
+        else
+          {
+            clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+          }
 
         priv->renderer->init (gst_source->sink);
+        gst_source->has_new_caps = FALSE;
       }
 
       priv->renderer->upload (gst_source->sink, buffer);
@@ -1221,6 +1290,15 @@ clutter_gst_video_sink_render (GstBaseSink *bsink,
   ClutterGstSource *gst_source = priv->source;
 
   g_mutex_lock (gst_source->render_lock);
+
+  if (gst_source->stage_lost)
+    {
+      GST_ELEMENT_ERROR (bsink, RESOURCE, CLOSE,
+          ("The window has been closed."),
+          ("The window has been closed."));
+      g_mutex_unlock (gst_source->render_lock);
+      return GST_FLOW_ERROR;
+    }
 
   if (gst_source->buffer)
     gst_buffer_unref (gst_source->buffer);
