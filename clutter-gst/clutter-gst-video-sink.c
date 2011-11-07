@@ -1446,6 +1446,11 @@ clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass *klass)
   GstBaseSinkClass *gstbase_sink_class = GST_BASE_SINK_CLASS (klass);
   GParamSpec *pspec;
 
+  GST_DEBUG_CATEGORY_INIT (clutter_gst_video_sink_debug,
+			   "cluttersink",
+			   0,
+			   "clutter video sink");
+
   g_type_class_add_private (klass, sizeof (ClutterGstVideoSinkPrivate));
 
   gobject_class->set_property = clutter_gst_video_sink_set_property;
@@ -1555,11 +1560,6 @@ clutter_gst_navigation_interface_init (GstNavigationInterface *iface)
 static gboolean
 plugin_init (GstPlugin *plugin)
 {
-  GST_DEBUG_CATEGORY_INIT (clutter_gst_video_sink_debug,
-			   "cluttersink",
-			   0,
-			   "clutter video sink");
-
   return gst_element_register (plugin,
 			       "cluttersink",
 			       GST_RANK_NONE,
