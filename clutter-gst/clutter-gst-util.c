@@ -99,7 +99,7 @@
 #include <gst/gst.h>
 #include <clutter/clutter.h>
 
-#if CLUTTER_WINDOWING_X11
+#if defined (CLUTTER_WINDOWING_X11)
 #include <X11/Xlib.h>
 #endif
 
@@ -131,7 +131,7 @@ clutter_gst_init (int    *argc,
   if (clutter_gst_is_initialized)
     return CLUTTER_INIT_SUCCESS;
 
-#if CLUTTER_WINDOWING_X11
+#if defined (CLUTTER_WINDOWING_X11)
   /* Required by some GStreamer element like VA */
   XInitThreads ();
 #endif
@@ -190,7 +190,7 @@ clutter_gst_init_with_args (int            *argc,
   if (clutter_gst_is_initialized)
     return CLUTTER_INIT_SUCCESS;
 
-#if CLUTTER_WINDOWING_X11
+#if defined (CLUTTER_WINDOWING_X11)
   /* Required by some gstreamer element like VA */
   XInitThreads ();
 #endif

@@ -57,7 +57,7 @@
 #include "clutter-gst-player.h"
 #include "clutter-gst-private.h"
 
-#if CLUTTER_WINDOWING_X11 && HAVE_HW_DECODER_SUPPORT
+#if defined (CLUTTER_WINDOWING_X11) && defined (HAVE_HW_DECODER_SUPPORT)
 #define GST_USE_UNSTABLE_API 1
 #include <gst/video/videocontext.h>
 #include <clutter/x11/clutter-x11.h>
@@ -1883,7 +1883,7 @@ clutter_gst_player_get_idle_impl (ClutterGstPlayer *player)
 
 /**/
 
-#if CLUTTER_WINDOWING_X11 && HAVE_HW_DECODER_SUPPORT
+#if defined (CLUTTER_WINDOWING_X11) && defined (HAVE_HW_DECODER_SUPPORT)
 static GstBusSyncReply
 on_sync_message (GstBus * bus, GstMessage * message, gpointer user_data)
 {
@@ -2031,7 +2031,7 @@ clutter_gst_player_init (ClutterGstPlayer *player)
                     G_CALLBACK (on_current_text_changed),
                     player);
 
-#if CLUTTER_WINDOWING_X11 && HAVE_HW_DECODER_SUPPORT
+#if defined(CLUTTER_WINDOWING_X11) && defined (HAVE_HW_DECODER_SUPPORT)
   gst_bus_set_sync_handler (priv->bus, on_sync_message,
       clutter_x11_get_default_display ());
 #endif

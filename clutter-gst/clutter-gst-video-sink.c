@@ -65,7 +65,7 @@
 #include <gst/video/gstsurfacebuffer.h>
 #endif
 
-#if CLUTTER_WINDOWING_X11
+#if defined (CLUTTER_WINDOWING_X11)
 #include <X11/Xlib.h>
 #endif
 
@@ -1647,7 +1647,7 @@ static gboolean
 plugin_init (GstPlugin *plugin)
 {
 
-#if CLUTTER_WINDOWING_X11
+#if defined (CLUTTER_WINDOWING_X11)
   /* Required by some GStreamer element like VA */
   XInitThreads ();
 #endif
