@@ -1200,6 +1200,8 @@ on_volume_changed_main_context (gpointer data)
 
   g_object_notify (G_OBJECT (player), "audio-volume");
 
+  g_object_unref (player);
+
   return FALSE;
 }
 
@@ -1212,7 +1214,7 @@ on_volume_changed (GstElement       *pipeline,
 		   GParamSpec       *pspec,
 		   ClutterGstPlayer *player)
 {
-  g_idle_add (on_volume_changed_main_context, player);
+  g_idle_add (on_volume_changed_main_context, g_object_ref (player));
 }
 
 static GList *
@@ -1252,6 +1254,8 @@ on_audio_changed_main_context (gpointer data)
 
   g_object_notify (G_OBJECT (player), "audio-streams");
 
+  g_object_unref (player);
+
   return FALSE;
 }
 
@@ -1260,7 +1264,7 @@ static void
 on_audio_changed (GstElement       *pipeline,
                   ClutterGstPlayer *player)
 {
-  g_idle_add (on_audio_changed_main_context, player);
+  g_idle_add (on_audio_changed_main_context, g_object_ref (player));
 }
 
 static void
@@ -1275,7 +1279,7 @@ on_audio_tags_changed (GstElement       *pipeline,
   if (current_stream != stream)
     return;
 
-  g_idle_add (on_audio_changed_main_context, player);
+  g_idle_add (on_audio_changed_main_context, g_object_ref (player));
 }
 
 static gboolean
@@ -1286,6 +1290,8 @@ on_current_audio_changed_main_context (gpointer data)
   CLUTTER_GST_NOTE (AUDIO_STREAM, "audio stream changed");
   g_object_notify (G_OBJECT (player), "audio-stream");
 
+  g_object_unref (player);
+
   return FALSE;
 }
 
@@ -1294,7 +1300,7 @@ on_current_audio_changed (GstElement       *pipeline,
                           GParamSpec       *pspec,
                           ClutterGstPlayer *player)
 {
-  g_idle_add (on_current_audio_changed_main_context, player);
+  g_idle_add (on_current_audio_changed_main_context, g_object_ref (player));
 }
 
 static gboolean
@@ -1310,6 +1316,8 @@ on_text_changed_main_context (gpointer data)
 
   g_object_notify (G_OBJECT (player), "subtitle-tracks");
 
+  g_object_unref (player);
+
   return FALSE;
 }
 
@@ -1318,7 +1326,7 @@ static void
 on_text_changed (GstElement       *pipeline,
                   ClutterGstPlayer *player)
 {
-  g_idle_add (on_text_changed_main_context, player);
+  g_idle_add (on_text_changed_main_context, g_object_ref (player));
 }
 
 static void
@@ -1326,7 +1334,7 @@ on_text_tags_changed (GstElement       *pipeline,
                        gint              stream,
                        ClutterGstPlayer *player)
 {
-  g_idle_add (on_text_changed_main_context, player);
+  g_idle_add (on_text_changed_main_context, g_object_ref (player));
 }
 
 static gboolean
@@ -1337,6 +1345,8 @@ on_current_text_changed_main_context (gpointer data)
   CLUTTER_GST_NOTE (AUDIO_STREAM, "text stream changed");
   g_object_notify (G_OBJECT (player), "subtitle-track");
 
+  g_object_unref (player);
+
   return FALSE;
 }
 
@@ -1345,7 +1355,7 @@ on_current_text_changed (GstElement       *pipeline,
                           GParamSpec       *pspec,
                           ClutterGstPlayer *player)
 {
-  g_idle_add (on_current_text_changed_main_context, player);
+  g_idle_add (on_current_text_changed_main_context, g_object_ref (player));
 }
 
 /* GObject's magic/madness */
