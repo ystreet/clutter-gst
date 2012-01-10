@@ -36,5 +36,6 @@
 #include "clutter-gst-video-texture.h"
 #include "clutter-gst-util.h"
 #include "clutter-gst-version.h"
+#include "clutter-gst-player.h"
 
 #endif /* __CLUTTER_GST_H__ */
