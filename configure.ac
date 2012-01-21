@@ -27,6 +27,8 @@ AM_CONFIG_HEADER([config.h])
 
 AM_INIT_AUTOMAKE([1.9 -Wno-portability foreign no-dist-gzip dist-xz tar-ustar])
 
+echo \#buildapi-variable-no-builddir >/dev/null
+
 CLUTTER_GST_MAJOR_VERSION=clutter_gst_major_version
 CLUTTER_GST_MINOR_VERSION=clutter_gst_minor_version
 CLUTTER_GST_MICRO_VERSION=clutter_gst_micro_version
