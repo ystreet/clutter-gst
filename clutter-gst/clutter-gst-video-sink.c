@@ -1621,32 +1621,3 @@ clutter_gst_navigation_interface_init (GstNavigationInterface *iface)
 {
   iface->send_event = clutter_gst_navigation_send_event;
 }
-
-static gboolean
-plugin_init (GstPlugin *plugin)
-{
-
-#if defined (CLUTTER_WINDOWING_X11)
-  /* Required by some GStreamer element like VA */
-  XInitThreads ();
-#endif
-
-  /* We must enshure that clutter is initialized */
-  if (clutter_init (NULL, NULL) != CLUTTER_INIT_SUCCESS)
-    return FALSE;
-
-  return gst_element_register (plugin,
-			       "cluttersink",
-			       GST_RANK_NONE,
-			       CLUTTER_GST_TYPE_VIDEO_SINK);;
-}
-
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
-		   GST_VERSION_MINOR,
-		   "cluttersink",
-		   "Element to render to Clutter textures",
-		   plugin_init,
-		   VERSION,
-		   "LGPL", /* license */
-		   PACKAGE,
-		   "http://www.clutter-project.org");

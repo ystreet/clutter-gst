@@ -97,7 +97,10 @@ cluttergstheaders_HEADERS = $(source_h) $(glib_enum_h)
 #
 
 plugin_source_c = 				\
+	$(srcdir)/clutter-gst-plugin.c	\
 	$(srcdir)/clutter-gst-video-sink.c	\
+	$(srcdir)/clutter-gst-auto-video-sink.c	\
+	$(srcdir)/clutter-gst-auto-video-sink.h	\
 	$(NULL)
 
 libgstclutter_la_SOURCES =	\

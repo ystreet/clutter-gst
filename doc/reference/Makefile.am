@@ -48,13 +48,14 @@ CFILE_GLOB=$(top_srcdir)/clutter-gst/*.c
 
 # Header files to ignore when scanning.
 # e.g. IGNORE_HFILES=gtkdebug.h gtkintl.h
-IGNORE_HFILES=			\
-	I420.h			\
-	YV12.h			\
-	clutter-gst.h		\
-	clutter-gst-debug.h	\
-	clutter-gst-private.h	\
-	clutter-gst-shaders.h	\
+IGNORE_HFILES=				\
+	I420.h				\
+	YV12.h				\
+	clutter-gst.h			\
+	clutter-gst-debug.h		\
+	clutter-gst-private.h		\
+	clutter-gst-shaders.h		\
+	clutter-gst-auto-video-sink.h	\
 	$(NULL)
 
 # Images to copy into HTML directory.
