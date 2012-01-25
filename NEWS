@@ -1,3 +1,31 @@
+clutter-gst 1.5.2 (25/01/2012)
+===============================================================================
+
+List of changes since 1.4.2
+
+ o Add a standalone gstreamer plugin. Clutter-gst gstreamer elements are now
+   available just like any other GStreamer elements, that includes working with
+   gst-launch.
+
+ o Add support for video/x-surface ("hardware" surfaces) that can be converted
+   to opengl textures. (Requires -bad 0.10.22.1)
+
+ o Addition of a new element, autocluttersink, a bin that picks up clutter-
+   compatible sinks automatically. This allows an eco-system of 3rd party
+   decoders and (clutter) sinks to be autoplugged.
+
+ o Various small fixes
+
+Many Thanks to:
+
+    Nicolas Dufresne
+    Josep Torra
+    Lionel Landwerlin
+    Neil Roberts
+    Colin Walters
+    Laurent Bigonville
+    Thomas Wood
+
 clutter-gst 1.4.2 (03/10/2011)
 ===============================================================================
 
