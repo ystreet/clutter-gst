@@ -338,6 +338,28 @@ clutter_gst_find_renderer_by_format (ClutterGstVideoSink  *sink,
   return renderer;
 }
 
+static void
+ensure_texture_pixel_aspect_ratio (ClutterGstVideoSink *sink)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  GParamSpec *pspec;
+  GValue par = {0, };
+
+  if (priv->texture == NULL)
+    return;
+
+  pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->texture),
+                                        "pixel-aspect-ratio");
+  if (pspec)
+    {
+      g_value_init (&par, GST_TYPE_FRACTION);
+      gst_value_set_fraction (&par, priv->par_n, priv->par_d);
+      g_object_set_property (G_OBJECT(priv->texture),
+                             "pixel-aspect-ratio", &par);
+      g_value_unset (&par);
+    }
+}
+
 static gboolean
 clutter_gst_parse_caps (GstCaps             *caps,
                         ClutterGstVideoSink *sink,
@@ -432,21 +454,13 @@ clutter_gst_parse_caps (GstCaps             *caps,
 
       if (par)
         {
-          GParamSpec *pspec;
-
-          /* If we happen to use a ClutterGstVideoTexture, now is to good time to
-           * instruct it about the pixel aspect ratio so we can have a correct
-           * natural width/height */
-          pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->texture),
-              "pixel-aspect-ratio");
-          if (pspec)
-            {
-              g_object_set_property (G_OBJECT(priv->texture),
-                  "pixel-aspect-ratio", par);
-            }
-
           priv->par_n = gst_value_get_fraction_numerator (par);
           priv->par_d = gst_value_get_fraction_denominator (par);
+
+          /* If we happen to use a ClutterGstVideoTexture, now is to good time
+           * to instruct it about the pixel aspect ratio so we can have a
+           * correct natural width/height */
+          ensure_texture_pixel_aspect_ratio (sink);
         }
       else
         priv->par_n = priv->par_d = 1;
@@ -556,6 +570,8 @@ clutter_gst_source_dispatch (GSource     *source,
 
       priv->renderer->init (gst_source->sink);
       gst_source->has_new_caps = FALSE;
+
+      ensure_texture_pixel_aspect_ratio (gst_source->sink);
     }
 
   buffer = gst_source->buffer;
