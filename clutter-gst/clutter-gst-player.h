@@ -108,7 +108,8 @@ struct _ClutterGstPlayerIface
 
   gboolean (*get_idle) (ClutterGstPlayer *player);
 
-  void (* _iface_reserved15) (void);
+  gboolean (*get_in_seek) (ClutterGstPlayer *player);
+
   void (* _iface_reserved16) (void);
   void (* _iface_reserved17) (void);
   void (* _iface_reserved18) (void);
@@ -177,6 +178,8 @@ void                      clutter_gst_player_set_subtitle_track  (ClutterGstPlay
                                                                   gint                    index_);
 
 gboolean                  clutter_gst_player_get_idle            (ClutterGstPlayer        *player);
+
+gboolean                  clutter_gst_player_get_in_seek         (ClutterGstPlayer        *player);
 
 G_END_DECLS
 

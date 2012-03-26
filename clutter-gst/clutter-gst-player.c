@@ -115,7 +115,8 @@ enum
   PROP_AUDIO_STREAMS,
   PROP_AUDIO_STREAM,
   PROP_SUBTITLE_TRACKS,
-  PROP_SUBTITLE_TRACK
+  PROP_SUBTITLE_TRACK,
+  PROP_IN_SEEK
 };
 
 struct _ClutterGstPlayerIfacePrivate
@@ -576,6 +577,17 @@ set_uri (ClutterGstPlayer *player,
 }
 
 static void
+set_in_seek (ClutterGstPlayer *player,
+             gboolean          seeking)
+{
+  ClutterGstPlayerPrivate *priv = PLAYER_GET_PRIVATE (player);
+
+  priv->in_seek = seeking;
+  g_object_notify (G_OBJECT (player), "in-seek");
+}
+
+
+static void
 set_playing (ClutterGstPlayer *player,
              gboolean          playing)
 {
@@ -593,7 +605,7 @@ set_playing (ClutterGstPlayer *player,
 
   if (priv->uri)
     {
-      priv->in_seek = FALSE;
+      set_in_seek (player, FALSE);
 
       gst_element_set_state (priv->pipeline, priv->target_state);
     }
@@ -685,7 +697,8 @@ set_progress (ClutterGstPlayer *player,
 		    position,
 		    GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE);
 
-  priv->in_seek = TRUE;
+  set_in_seek (player, TRUE);
+
   priv->stacked_progress = 0.0;
 
   CLUTTER_GST_NOTE (MEDIA, "set progress (seeked): %.02f", progress);
@@ -1177,7 +1190,7 @@ bus_message_async_done_cb (GstBus           *bus,
     {
       g_object_notify (G_OBJECT (player), "progress");
 
-      priv->in_seek = FALSE;
+      set_in_seek (player, FALSE);
 
       if (priv->stacked_progress)
         {
@@ -1520,6 +1533,10 @@ clutter_gst_player_get_property (GObject    *object,
       }
       break;
 
+    case PROP_IN_SEEK:
+      g_value_set_boolean (value, priv->in_seek);
+      break;
+
     default:
       iface_priv = PLAYER_GET_CLASS_PRIVATE (object);
       iface_priv->get_property (object, property_id, value, pspec);
@@ -1593,6 +1610,8 @@ clutter_gst_player_class_init (GObjectClass *object_class)
                                     PROP_SUBTITLE_TRACKS, "subtitle-tracks");
   g_object_class_override_property (object_class,
                                     PROP_SUBTITLE_TRACK, "subtitle-track");
+  g_object_class_override_property (object_class,
+                                    PROP_IN_SEEK, "in-seek");
 }
 
 static GstElement *
@@ -1891,6 +1910,17 @@ clutter_gst_player_get_idle_impl (ClutterGstPlayer *player)
   return priv->is_idle;
 }
 
+static gboolean
+clutter_gst_player_get_in_seek_impl (ClutterGstPlayer *player)
+{
+  ClutterGstPlayerPrivate *priv;
+
+  priv = PLAYER_GET_PRIVATE (player);
+
+  return priv->in_seek;
+}
+
+
 /**/
 
 #if defined (CLUTTER_WINDOWING_X11) && defined (HAVE_HW_DECODER_SUPPORT)
@@ -1969,6 +1999,7 @@ clutter_gst_player_init (ClutterGstPlayer *player)
   iface->get_subtitle_track = clutter_gst_player_get_subtitle_track_impl;
   iface->set_subtitle_track = clutter_gst_player_set_subtitle_track_impl;
   iface->get_idle = clutter_gst_player_get_idle_impl;
+  iface->get_in_seek = clutter_gst_player_get_in_seek_impl;
 
   priv = g_slice_new0 (ClutterGstPlayerPrivate);
   PLAYER_SET_PRIVATE (player, priv);
@@ -2203,6 +2234,22 @@ clutter_gst_player_default_init (ClutterGstPlayerIface *iface)
                             -1, G_MAXINT, -1,
                             CLUTTER_GST_PARAM_READWRITE);
   g_object_interface_install_property (iface, pspec);
+
+
+  /**
+   * ClutterGstPlayer:in-seek:
+   *
+   * Whether or not the stream is being seeked.
+   *
+   * Since: 1.6
+   */
+  pspec = g_param_spec_boolean ("in-seek",
+                                "In seek mode",
+                                "If currently seeking",
+                                FALSE,
+                                CLUTTER_GST_PARAM_READABLE);
+  g_object_interface_install_property (iface, pspec);
+
 
   /* Signals */
 
@@ -2562,4 +2609,26 @@ clutter_gst_player_get_idle (ClutterGstPlayer *player)
   iface = CLUTTER_GST_PLAYER_GET_INTERFACE (player);
 
   return iface->get_idle (player);
+}
+
+/**
+ * clutter_gst_player_get_in_seek:
+ * @player: a #ClutterGstPlayer
+ *
+ * Whether the player is seeking.
+ *
+ * Return value: TRUE if the player is seeking, FALSE otherwise.
+ *
+ * Since: 1.6
+ */
+gboolean
+clutter_gst_player_get_in_seek (ClutterGstPlayer *player)
+{
+  ClutterGstPlayerIface *iface;
+
+  g_return_val_if_fail (CLUTTER_GST_IS_PLAYER (player), FALSE);
+
+  iface = CLUTTER_GST_PLAYER_GET_INTERFACE (player);
+
+  return iface->get_in_seek (player);
 }
