@@ -20,8 +20,6 @@ EXTRA_DIST = clutter-gst.pc.in ChangeLog.pre-git-import
 
 CLEANFILES = clutter-gst.pc clutter-gst-$(CLUTTER_GST_API_VERSION).pc
 
-DISTCLEANFILES = doltcompile doltlibtool
-
 DISTCHECK_CONFIGURE_FLAGS = --enable-gtk-doc
 
 # Extra clean files so that maintainer-clean removes *everything*
