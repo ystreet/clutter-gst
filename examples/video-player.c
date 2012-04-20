@@ -247,7 +247,7 @@ input_cb (ClutterStage *stage,
                                      "rotation-angle-y", 360.0,
                                      "fixed::rotation-center-y", &center,
                                      NULL);
-            g_signal_connect (animation, "completed",
+            g_signal_connect_after (animation, "completed",
                               G_CALLBACK (reset_animation),
                               app);
             handled = TRUE;
