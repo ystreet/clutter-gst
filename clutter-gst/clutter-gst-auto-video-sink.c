@@ -317,6 +317,12 @@ clutter_gst_auto_video_sink_do_async_start (ClutterGstAutoVideoSink *bin)
 {
   GstMessage *message;
 
+  if (!bin->need_async_start)
+    {
+      GST_DEBUG_OBJECT (bin, "no async_start needed");
+      return;
+    }
+
   bin->async_pending = TRUE;
 
   GST_INFO_OBJECT (bin, "Sending async_start message");
@@ -338,6 +344,7 @@ clutter_gst_auto_video_sink_do_async_done (ClutterGstAutoVideoSink *bin)
 
       bin->async_pending = FALSE;
     }
+  bin->need_async_start = FALSE;
 }
 
 static gboolean
@@ -555,6 +562,7 @@ clutter_gst_auto_video_sink_change_state (GstElement    *element,
       break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
       CLUTTER_GST_AUTO_VIDEO_SINK_LOCK (bin);
+      bin->need_async_start = TRUE;
       /* Here we set our callback to intercept data flow on the first buffer */
       GST_DEBUG_OBJECT (bin, "try to block input pad to setup internal "
                              "pipeline");
@@ -570,12 +578,34 @@ clutter_gst_auto_video_sink_change_state (GstElement    *element,
       break;
     }
 
+  /* do the state change of the children */
   bret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
-  if (bret == GST_STATE_CHANGE_FAILURE)
-    return bret;
+  /* now look at the result of our children and adjust the return value */
+  switch (bret)
+    {
+    case GST_STATE_CHANGE_FAILURE:
+      /* failure, we stop */
+      goto activate_failed;
+    case GST_STATE_CHANGE_NO_PREROLL:
+      /* some child returned NO_PREROLL. This is strange but we never know. We
+       * commit our async state change (if any) and return the NO_PREROLL */
+      clutter_gst_auto_video_sink_do_async_done (bin);
+      ret = bret;
+      break;
+    case GST_STATE_CHANGE_ASYNC:
+      /* some child was async, return this */
+      ret = bret;
+      break;
+    default:
+      /* return our previously configured return value */
+      break;
+    }
 
   switch (transition)
     {
+    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+      bin->need_async_start = TRUE;
+      break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       CLUTTER_GST_AUTO_VIDEO_SINK_LOCK (bin);
 
@@ -602,12 +632,20 @@ clutter_gst_auto_video_sink_change_state (GstElement    *element,
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       _sinks_destroy (bin);
+      clutter_gst_auto_video_sink_do_async_done (bin);
       break;
     default:
       break;
     }
 
   return ret;
+  /* ERRORS */
+activate_failed:
+  {
+    GST_DEBUG_OBJECT (bin,
+        "element failed to change states -- activation problem?");
+    return GST_STATE_CHANGE_FAILURE;
+  }
 }
 
 static void

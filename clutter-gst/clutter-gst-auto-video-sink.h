@@ -93,6 +93,7 @@ struct _ClutterGstAutoVideoSink
   GstCaps *video_caps;
   GSList *sinks;
 
+  gboolean need_async_start;
   gboolean async_pending;
   gboolean setup;
 
