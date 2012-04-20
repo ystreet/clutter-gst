@@ -668,11 +668,7 @@ clutter_gst_auto_video_sink_dispose (GObject *object)
       bin->sink_block_pad = NULL;
     }
 
-  if (bin->texture)
-    {
-      g_object_unref (bin->texture);
-      bin->texture = NULL;
-    }
+  bin->texture = NULL;
 
   GST_CALL_PARENT (G_OBJECT_CLASS, dispose, (object));
 }
@@ -699,10 +695,6 @@ static void
 clutter_gst_auto_video_sink_set_texture (ClutterGstAutoVideoSink *bin,
                                          ClutterTexture          *texture)
 {
-  if (bin->texture)
-    {
-      g_object_unref (bin->texture);
-    }
   bin->texture = texture;
   if (bin->setup)
     {
@@ -721,7 +713,7 @@ clutter_gst_auto_video_sink_set_property (GObject      *object,
   switch (prop_id)
     {
     case PROP_TEXTURE:
-      clutter_gst_auto_video_sink_set_texture (bin, g_value_dup_object (value));
+      clutter_gst_auto_video_sink_set_texture (bin, g_value_get_object (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
