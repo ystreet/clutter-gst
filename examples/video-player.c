@@ -233,7 +233,7 @@ input_cb (ClutterStage *stage,
             break;
           case CLUTTER_q:
           case CLUTTER_Escape:
-            clutter_main_quit ();
+            clutter_actor_destroy (app->stage);
             break;
 
           case CLUTTER_e:
@@ -384,7 +384,7 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
-  stage = clutter_stage_get_default ();
+  stage = clutter_stage_new ();
   clutter_stage_set_color (CLUTTER_STAGE (stage), &stage_color);
   clutter_actor_set_size (stage, 768, 576);
   clutter_stage_set_minimum_size (CLUTTER_STAGE (stage), 640, 480);
@@ -416,6 +416,11 @@ main (int argc, char *argv[])
                     "allocation-changed",
                     G_CALLBACK (on_stage_allocation_changed),
                     app);
+
+  g_signal_connect (stage,
+                    "destroy",
+                    G_CALLBACK (clutter_main_quit),
+                    NULL);
 
   /* Handle it ourselves so can scale up for fullscreen better */
   g_signal_connect_after (CLUTTER_TEXTURE (app->vtexture),
