@@ -29,6 +29,12 @@
 #include "config.h"
 #endif
 
+#include <clutter/clutter.h>
+
+#if defined (CLUTTER_WINDOWING_X11)
+#include <X11/Xlib.h>
+#endif
+
 #include "clutter-gst-video-sink.h"
 #include "clutter-gst-auto-video-sink.h"
 
