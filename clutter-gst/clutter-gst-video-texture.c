@@ -44,6 +44,7 @@
 
 #include <glib.h>
 #include <gio/gio.h>
+#include <gst/base/gstbasesink.h>
 #include <gst/video/video.h>
 
 #include "clutter-gst-debug.h"
@@ -531,6 +532,15 @@ idle_cb (ClutterGstVideoTexture *video_texture,
   clutter_actor_queue_redraw (CLUTTER_ACTOR (video_texture));
 }
 
+static void
+on_autocluttersink_element_added (GstBin                 *bin,
+				  GstElement             *element,
+				  ClutterGstVideoTexture *data)
+{
+  if (GST_IS_BASE_SINK (element))
+    g_object_set (G_OBJECT (element), "qos", TRUE, NULL);
+}
+
 static gboolean
 setup_pipeline (ClutterGstVideoTexture *video_texture)
 {
@@ -544,11 +554,14 @@ setup_pipeline (ClutterGstVideoTexture *video_texture)
       return FALSE;
     }
 
-  video_sink = gst_element_factory_make ("cluttersink", NULL);
+  video_sink = gst_element_factory_make ("autocluttersink", NULL);
+  g_signal_connect (video_sink,
+		    "element-added",
+		    G_CALLBACK (on_autocluttersink_element_added),
+		    video_texture);
   g_object_set (G_OBJECT (video_sink),
                 "texture", CLUTTER_TEXTURE (video_texture),
-                "qos", TRUE,
-                "sync", TRUE, NULL);
+		NULL);
   g_object_set (G_OBJECT (pipeline),
                 "video-sink", video_sink,
                 "subtitle-font-desc", "Sans 16",
