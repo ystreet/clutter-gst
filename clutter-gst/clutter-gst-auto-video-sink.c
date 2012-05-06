@@ -31,8 +31,6 @@
 
 #include <string.h>
 #include <clutter/clutter.h>
-#include <clutter/x11/clutter-x11.h>
-#include <clutter/glx/clutter-glx-texture-pixmap.h>
 
 #include "clutter-gst-auto-video-sink.h"
 #include "clutter-gst-private.h"
