@@ -1,3 +1,23 @@
+clutter-gst 1.5.6 (25/05/2012)
+===============================================================================
+
+List of changes since 1.5.4
+
+ o Fix play/pause of autocluttersink,
+
+ o Add a "in-seek" property to the player to be notified when the pipeline
+   is seeking,
+
+ o Various build and smaller fixes.
+
+Many Thanks to:
+
+    Josep Torra
+    Tomas Frydrych
+    Adrian Bunk
+    Lionel Landwerlin
+    Michael Wood
+
 clutter-gst 1.5.4 (23/02/2012)
 ===============================================================================
 
