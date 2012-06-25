@@ -4,10 +4,6 @@
 
 TAR_OPTIONS = --owner=0 --group=0
 
-RELEASE_UPLOAD_HOST = clutter-project.org
-RELEASE_UPLOAD_USER = clutter
-RELEASE_UPLOAD_DIR  = $(RELEASE_UPLOAD_USER)@$(RELEASE_UPLOAD_HOST):upload-source
-
 RELEASE_URL_BASE = http://source.clutter-project.org/sources/clutter-gst
 RELEASE_URL      = $(RELEASE_URL_BASE)/$(CLUTTER_GST_MAJOR_VERSION).$(CLUTTER_GST_MINOR_VERSION)
 
@@ -46,8 +42,6 @@ release-verify-even-micro:
 	@echo "Good."
 
 release-upload: $(sha256_file)
-	@echo "Uploading to $(RELEASE_UPLOAD_HOST)..."
-	@scp $(tar_file) $(RELEASE_UPLOAD_DIR)
 	@echo "Uploading to master.gnome.org..."
 	@scp $(tar_file) dlespiau@master.gnome.org:
 	@echo "Running ftpadmin install..."
