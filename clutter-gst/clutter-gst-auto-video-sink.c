@@ -47,8 +47,11 @@ static GstStaticPadTemplate sink_template_factory =
 enum
 {
   PROP_0,
-  PROP_TEXTURE
+  PROP_TEXTURE,
+  PROP_TS_OFFSET
 };
+
+#define DEFAULT_TS_OFFSET           0
 
 G_DEFINE_TYPE (ClutterGstAutoVideoSink,
                  clutter_gst_auto_video_sink,
@@ -381,8 +384,8 @@ clutter_gst_auto_video_sink_reconfigure (ClutterGstAutoVideoSink *bin,
 
   /* Now we are ready to add the sink to bin */
   bin->child = gst_object_ref (sink);
-  g_object_set (G_OBJECT(bin->child), "texture", bin->texture, NULL);
-
+  g_object_set (G_OBJECT(bin->child), "texture", bin->texture,
+      "ts-offset", bin->ts_offset, NULL);
   GST_DEBUG_OBJECT (bin, "going to add %" GST_PTR_FORMAT, bin->child);
   /* Add our child */
   gst_bin_add (GST_BIN (bin), bin->child);
@@ -690,6 +693,13 @@ clutter_gst_auto_video_sink_set_property (GObject      *object,
     case PROP_TEXTURE:
       clutter_gst_auto_video_sink_set_texture (bin, g_value_get_object (value));
       break;
+    case PROP_TS_OFFSET:
+      bin->ts_offset = g_value_get_int64 (value);
+      if (bin->child) {
+        g_object_set_property (G_OBJECT (bin->child), pspec->name,
+            value);
+      }
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -708,6 +718,9 @@ clutter_gst_auto_video_sink_get_property (GObject    *object,
     {
     case PROP_TEXTURE:
       g_value_set_object (value, bin->texture);
+      break;
+    case PROP_TS_OFFSET:
+      g_value_set_int64 (value, bin->ts_offset);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -752,6 +765,11 @@ clutter_gst_auto_video_sink_class_init (ClutterGstAutoVideoSinkClass *klass)
 
   g_object_class_install_property (oclass, PROP_TEXTURE, pspec);
 
+  g_object_class_install_property (oclass, PROP_TS_OFFSET,
+      g_param_spec_int64 ("ts-offset", "TS Offset",
+          "Timestamp offset in nanoseconds", G_MININT64, G_MAXINT64,
+          DEFAULT_TS_OFFSET, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstelement_class->change_state =
     GST_DEBUG_FUNCPTR (clutter_gst_auto_video_sink_change_state);
 }
@@ -765,6 +783,7 @@ clutter_gst_auto_video_sink_init (ClutterGstAutoVideoSink      *bin)
 
   bin->setup = FALSE;
   bin->texture = NULL;
+  bin->ts_offset = DEFAULT_TS_OFFSET;
 
   /* Create a ghost pad with no target at first */
   template = gst_static_pad_template_get (&sink_template_factory);
