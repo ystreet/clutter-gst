@@ -7,6 +7,6 @@ Name: clutter-gst
 Description: Clutter GStreamer integration
 Version: @VERSION@
 Libs: -L${libdir} -lclutter-gst-@CLUTTER_GST_MAJORMINOR@ 
-Cflags: -I${includedir}/clutter-@CLUTTER_API_VERSION@
+Cflags: -I${includedir}/clutter-gst-@CLUTTER_GST_API_VERSION@
 Requires: clutter-@CLUTTER_API_VERSION@ >= 1.3.12 gstreamer-1.0 gstreamer-base-1.0 gstreamer-plugins-base-1.0
 Requires.private: gio-2.0

@@ -88,7 +88,7 @@ libclutter_gst_@CLUTTER_GST_MAJORMINOR@_la_LDFLAGS =	\
 	-rpath $(libdir)
 	$(NULL)
 
-cluttergstheadersdir = $(includedir)/clutter-@CLUTTER_API_VERSION@/clutter-gst
+cluttergstheadersdir = $(includedir)/clutter-gst-@CLUTTER_GST_API_VERSION@/clutter-gst
 cluttergstheaders_HEADERS = $(source_h) $(glib_enum_h)
 
 #
