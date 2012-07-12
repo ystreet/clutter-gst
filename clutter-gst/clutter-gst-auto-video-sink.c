@@ -661,11 +661,7 @@ clutter_gst_auto_video_sink_finalize (GObject *object)
 
   _sinks_destroy (bin);
 
-  if (bin->lock)
-    {
-      g_mutex_free (bin->lock);
-      bin->lock = NULL;
-    }
+  g_mutex_clear (&bin->lock);
 
   GST_CALL_PARENT (G_OBJECT_CLASS, finalize, (object));
 }
@@ -804,6 +800,5 @@ clutter_gst_auto_video_sink_init (ClutterGstAutoVideoSink      *bin)
   gst_element_add_pad (GST_ELEMENT (bin), bin->sink_pad);
   /* Setup the element */
   GST_OBJECT_FLAG_SET (GST_OBJECT (bin), GST_ELEMENT_FLAG_SINK);
-  bin->lock = g_mutex_new ();
-  return;
+  g_mutex_init (&bin->lock);
 }

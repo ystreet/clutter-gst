@@ -65,7 +65,7 @@ G_BEGIN_DECLS
     GST_LOG_OBJECT (obj,                                                \
                     "locking from thread %p",                           \
                     g_thread_self ());                                  \
-    g_mutex_lock (CLUTTER_GST_AUTO_VIDEO_SINK(obj)->lock);              \
+    g_mutex_lock (&CLUTTER_GST_AUTO_VIDEO_SINK(obj)->lock);              \
     GST_LOG_OBJECT (obj,                                                \
                     "locked from thread %p",                            \
                     g_thread_self ());                                  \
@@ -75,7 +75,7 @@ G_BEGIN_DECLS
     GST_LOG_OBJECT (obj,                                                \
                     "unlocking from thread %p",                         \
                     g_thread_self ());                                  \
-    g_mutex_unlock (CLUTTER_GST_AUTO_VIDEO_SINK(obj)->lock);            \
+    g_mutex_unlock (&CLUTTER_GST_AUTO_VIDEO_SINK(obj)->lock);            \
 } G_STMT_END
 
 typedef struct _ClutterGstAutoVideoSink ClutterGstAutoVideoSink;
@@ -100,7 +100,7 @@ struct _ClutterGstAutoVideoSink
 
   ClutterTexture *texture;
 
-  GMutex *lock;
+  GMutex lock;
 };
 
 struct _ClutterGstAutoVideoSinkClass

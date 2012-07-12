@@ -172,7 +172,7 @@ typedef struct _ClutterGstSource
   GSource              source;
 
   ClutterGstVideoSink *sink;
-  GMutex              *buffer_lock;   /* mutex for the buffer */
+  GMutex               buffer_lock;   /* mutex for the buffer */
   GstBuffer           *buffer;
   gboolean             has_new_caps;
   gboolean             stage_lost;
@@ -263,7 +263,7 @@ clutter_gst_source_new (ClutterGstVideoSink *sink)
   g_source_set_priority (source, priv->priority);
 
   gst_source->sink = sink;
-  gst_source->buffer_lock = g_mutex_new ();
+  g_mutex_init (&gst_source->buffer_lock);
   gst_source->buffer = NULL;
 
   return gst_source;
@@ -274,12 +274,12 @@ clutter_gst_source_finalize (GSource *source)
 {
   ClutterGstSource *gst_source = (ClutterGstSource *) source;
 
-  g_mutex_lock (gst_source->buffer_lock);
+  g_mutex_lock (&gst_source->buffer_lock);
   if (gst_source->buffer)
     gst_buffer_unref (gst_source->buffer);
   gst_source->buffer = NULL;
-  g_mutex_unlock (gst_source->buffer_lock);
-  g_mutex_free (gst_source->buffer_lock);
+  g_mutex_unlock (&gst_source->buffer_lock);
+  g_mutex_clear (&gst_source->buffer_lock);
 }
 
 static gboolean
@@ -461,7 +461,7 @@ on_stage_destroyed (ClutterStage *stage,
   ClutterGstSource *gst_source = user_data;
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
 
-  g_mutex_lock (gst_source->buffer_lock);
+  g_mutex_lock (&gst_source->buffer_lock);
 
   clutter_actor_hide (CLUTTER_ACTOR (stage));
   clutter_container_remove_actor (CLUTTER_CONTAINER (stage),
@@ -474,7 +474,7 @@ on_stage_destroyed (ClutterStage *stage,
   gst_source->buffer = NULL;
   priv->texture = NULL;
 
-  g_mutex_unlock (gst_source->buffer_lock);
+  g_mutex_unlock (&gst_source->buffer_lock);
 
   return TRUE;
 }
@@ -508,7 +508,7 @@ clutter_gst_source_dispatch (GSource     *source,
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
   GstBuffer *buffer;
 
-  g_mutex_lock (gst_source->buffer_lock);
+  g_mutex_lock (&gst_source->buffer_lock);
 
   if (G_UNLIKELY (gst_source->has_new_caps))
     {
@@ -556,7 +556,7 @@ clutter_gst_source_dispatch (GSource     *source,
   buffer = gst_source->buffer;
   gst_source->buffer = NULL;
 
-  g_mutex_unlock (gst_source->buffer_lock);
+  g_mutex_unlock (&gst_source->buffer_lock);
 
   if (buffer)
     {
@@ -1299,14 +1299,14 @@ clutter_gst_video_sink_render (GstBaseSink *bsink,
   ClutterGstSource *gst_source = priv->source;
 
 
-  g_mutex_lock (gst_source->buffer_lock);
+  g_mutex_lock (&gst_source->buffer_lock);
 
   if (gst_source->stage_lost)
     {
       GST_ELEMENT_ERROR (bsink, RESOURCE, CLOSE,
           ("The window has been closed."),
           ("The window has been closed."));
-      g_mutex_unlock (gst_source->buffer_lock);
+      g_mutex_unlock (&gst_source->buffer_lock);
       return GST_FLOW_ERROR;
     }
 
@@ -1314,7 +1314,7 @@ clutter_gst_video_sink_render (GstBaseSink *bsink,
     gst_buffer_unref (gst_source->buffer);
   gst_source->buffer = gst_buffer_ref (buffer);
 
-  g_mutex_unlock (gst_source->buffer_lock);
+  g_mutex_unlock (&gst_source->buffer_lock);
 
   g_main_context_wakeup (priv->clutter_main_context);
 
@@ -1343,9 +1343,9 @@ clutter_gst_video_sink_set_caps (GstBaseSink *bsink,
   if (!clutter_gst_parse_caps (caps, sink, FALSE))
     return FALSE;
 
-  g_mutex_lock (priv->source->buffer_lock);
+  g_mutex_lock (&priv->source->buffer_lock);
   priv->source->has_new_caps = TRUE;
-  g_mutex_unlock (priv->source->buffer_lock);
+  g_mutex_unlock (&priv->source->buffer_lock);
 
   return TRUE;
 }
