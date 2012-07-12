@@ -57,7 +57,7 @@ typedef struct _ClutterGstPlayerIfacePrivate ClutterGstPlayerIfacePrivate;
 
 
 /**
- * ClutterGstPlayer
+ * ClutterGstPlayer:
  *
  * #ClutterGstPlayer is an opaque structure whose members cannot be
  * directly accessed

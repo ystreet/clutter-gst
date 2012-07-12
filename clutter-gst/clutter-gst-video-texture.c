@@ -656,7 +656,6 @@ clutter_gst_video_texture_get_idle_material (ClutterGstVideoTexture *texture)
   return texture->priv->idle_material;
 }
 /**
-
  * clutter_gst_video_texture_set_idle_material:
  * @texture: a #ClutterGstVideoTexture
  * @material: the handle of a Cogl material
