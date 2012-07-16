@@ -528,7 +528,8 @@ clutter_gst_source_dispatch (GSource     *source,
                                               "disable-slicing", TRUE,
                                               NULL);
 
-          priv->texture = CLUTTER_TEXTURE (actor);
+          clutter_gst_video_sink_set_texture (gst_source->sink,
+              CLUTTER_TEXTURE (actor));
           clutter_stage_set_user_resizable (CLUTTER_STAGE (stage), TRUE);
           clutter_container_add_actor (CLUTTER_CONTAINER (stage), actor);
           clutter_stage_set_no_clear_hint (CLUTTER_STAGE (stage), TRUE);
