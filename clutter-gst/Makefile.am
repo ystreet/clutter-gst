@@ -133,13 +133,13 @@ ClutterGst-@CLUTTER_GST_API_VERSION@.gir: $(INTROSPECTION_SCANNER) libclutter-gs
 		--c-include="clutter-gst/clutter-gst.h" \
 		--include=GObject-2.0 \
 		--include=Clutter-1.0 \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-@CLUTTER_GST_API_VERSION@` \
+		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-1.0` \
 		--include=Gst-1.0 \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-base-@CLUTTER_GST_API_VERSION@` \
+		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-base-1.0` \
 		--include=GstBase-1.0 \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-video-@CLUTTER_GST_API_VERSION@` \
+		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-video-1.0` \
 		--include=GstVideo-1.0 \
-		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-audio-@CLUTTER_GST_API_VERSION@` \
+		--add-include-path=`$(PKG_CONFIG) --variable=girdir gstreamer-audio-1.0` \
 		--include=GstAudio-1.0 \
 		--add-init-section="clutter_gst_init(0,NULL);" \
 		--library=libclutter-gst-@CLUTTER_GST_API_VERSION@.la \
@@ -167,10 +167,10 @@ typelibs_DATA = $(BUILT_GIRSOURCES:.gir=.typelib)
 	$(QUIET_GEN)$(INTROSPECTION_COMPILER) \
 		--includedir=$(srcdir) \
 		--includedir=. \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-@CLUTTER_GST_API_VERSION@` \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-base-@CLUTTER_GST_API_VERSION@` \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-video-@CLUTTER_GST_API_VERSION@` \
-		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-audio-@CLUTTER_GST_API_VERSION@` \
+		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-1.0` \
+		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-base-1.0` \
+		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-video-1.0` \
+		--includedir=`$(PKG_CONFIG) --variable=girdir gstreamer-audio-1.0` \
 		$(INTROSPECTION_COMPILER_OPTS) $< -o $(builddir)/$(@F)
 
 CLEANFILES += $(BUILT_GIRSOURCES) $(typelibs_DATA)
