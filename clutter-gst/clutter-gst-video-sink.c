@@ -1133,7 +1133,7 @@ static GSList *
 clutter_gst_build_renderers_list (void)
 {
   GSList             *list = NULL;
-  GLint               nb_texture_units = 0;
+  gint                nb_texture_units = 0;
   gint                features = 0, i;
   /* The order of the list of renderers is important. They will be prepended
    * to a GSList and we'll iterate over that list to choose the first matching
