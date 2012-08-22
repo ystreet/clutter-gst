@@ -5,7 +5,7 @@ List of changes since 1.6.0
 
  o Port to GStreamer 1.0
 
- o Fix navigation support in the standalon plugin
+ o Fix navigation support in the standalone plugin
 
 Many Thanks to:
 
@@ -18,7 +18,7 @@ Many Thanks to:
 clutter-gst 1.6.0 (25/06/2012)
 ===============================================================================
 
-List of changes since 1.6.0
+List of changes since 1.5.6
 
  o None. This stable release is the same as 1.5.6.
 
