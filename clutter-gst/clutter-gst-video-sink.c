@@ -1025,13 +1025,16 @@ clutter_gst_hw_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 
   if (G_UNLIKELY (priv->converter == NULL)) {
     CoglHandle tex;
-    GLuint gl_texture;
-    GLenum gl_target;
+    unsigned int gl_texture;
+    unsigned int gl_target;
     GValue value = { 0 };
 
     tex = clutter_texture_get_cogl_texture (priv->texture);
     cogl_texture_get_gl_texture (tex, &gl_texture, &gl_target);
+    /* GL_TEXTURE_2D is always used in GLES2 */
+#ifndef COGL_HAS_GLES2
     g_return_if_fail (gl_target == GL_TEXTURE_2D);
+#endif
 
     g_value_init (&value, G_TYPE_UINT);
     g_value_set_uint (&value, gl_texture);
