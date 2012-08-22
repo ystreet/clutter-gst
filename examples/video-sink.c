@@ -4,7 +4,7 @@
  * GStreamer integration library for Clutter.
  *
  * video-sink.c - A small example around the videotestsrc ! warptv !
- *                ffmpegcolorspace ! cluttersink pipeline.
+ *                videoconvert ! cluttersink pipeline.
  *
  * Copyright (C) 2007,2008 OpenedHand
  *
@@ -112,7 +112,7 @@ main (int argc, char *argv[])
 
   src = gst_element_factory_make ("videotestsrc", NULL);
   warp = gst_element_factory_make ("warptv", NULL);
-  colorspace = gst_element_factory_make ("ffmpegcolorspace", NULL);
+  colorspace = gst_element_factory_make ("videoconvert", NULL);
   sink = gst_element_factory_make ("cluttersink", NULL);
   g_object_set (sink, "texture", CLUTTER_TEXTURE (texture), NULL);
 

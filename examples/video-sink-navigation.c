@@ -4,7 +4,7 @@
  * GStreamer integration library for Clutter.
  *
  * video-sink.c - A small example around the videotestsrc ! capsfilter !
- *                navigationtest ! ffmpegcolorspace ! cluttersink pipeline.
+ *                navigationtest ! videoconvert ! cluttersink pipeline.
  *
  * Copyright (C) 2007,2008 OpenedHand
  *
@@ -114,10 +114,10 @@ main (int argc, char *argv[])
   pipeline = GST_PIPELINE(gst_pipeline_new (NULL));
 
   src = gst_parse_launch ("videotestsrc", NULL);
-  filter = gst_parse_launch ("capsfilter caps=video/x-raw-yuv,pixel-aspect-ratio=1/4", NULL);
+  filter = gst_parse_launch ("capsfilter caps=video/x-raw,pixel-aspect-ratio=1/4", NULL);
 
   test = gst_element_factory_make ("navigationtest", NULL);
-  colorspace = gst_element_factory_make ("ffmpegcolorspace", NULL);
+  colorspace = gst_element_factory_make ("videoconvert", NULL);
   sink = gst_element_factory_make ("cluttersink", NULL);
   g_object_set (sink, "texture", CLUTTER_TEXTURE (texture), NULL);
 
