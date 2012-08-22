@@ -1,3 +1,20 @@
+clutter-gst 1.9.90 (22/08/2012)
+===============================================================================
+
+List of changes since 1.6.0
+
+ o Port to GStreamer 1.0
+
+ o Fix navigation support in the standalon plugin
+
+Many Thanks to:
+
+    Edward Hervey
+    Tim-Philipp Müller
+    Bastien Nocera
+    Nicolas Dufresne
+    Sjoerd Simons
+
 clutter-gst 1.6.0 (25/06/2012)
 ===============================================================================
 
