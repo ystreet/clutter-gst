@@ -94,6 +94,27 @@ static gchar *ayuv_to_rgba_shader =
     "  color.b = y + 2.015625 * u;"
     "  cogl_color_out = color;}";
 
+static gchar *nv12_to_rgba_shader =
+    "uniform sampler2D ytex;"
+    "uniform sampler2D utex;"
+    "void main () {"
+    "  vec2 coord = vec2(cogl_tex_coord_in[0]);"
+    "  float y = 1.1640625 * (texture2D (ytex, coord).x - 0.0625);"
+    "  float uvr = int (texture2D (utex, coord).r * 32);"
+    "  float uvg = int (texture2D (utex, coord).g * 64);"
+    "  float uvb = int (texture2D (utex, coord).b * 32);"
+    "  float tg = floor (uvg / 8.0);"
+    "  float u = (uvb + (uvg - tg * 8.0) * 32.0) / 256.0;"
+    "  float v = (uvr * 8.0 + tg) / 256.0;"
+    "  u -= 0.5;"
+    "  v -= 0.5;"
+    "  vec4 color;"
+    "  color.r = y + 1.59765625 * v;"
+    "  color.g = y - 0.390625 * u - 0.8125 * v;"
+    "  color.b = y + 2.015625 * u;"
+    "  color.a = 1.0;"
+    "  cogl_color_out = color;}";
+
 static gchar *yv12_to_rgba_shader =
     "uniform sampler2D ytex;"
     "uniform sampler2D utex;"
@@ -112,6 +133,7 @@ static gchar *yv12_to_rgba_shader =
 
 #define BASE_SINK_CAPS "{ AYUV," \
                        "YV12," \
+                       "NV12," \
                        "I420," \
                        "RGBA," \
                        "BGRA," \
@@ -144,6 +166,7 @@ typedef enum
   CLUTTER_GST_RGB24,
   CLUTTER_GST_AYUV,
   CLUTTER_GST_YV12,
+  CLUTTER_GST_NV12,
   CLUTTER_GST_I420,
   CLUTTER_GST_SURFACE
 } ClutterGstVideoFormat;
@@ -342,6 +365,9 @@ clutter_gst_parse_caps (GstCaps * caps,
   switch (vinfo.finfo->format) {
     case GST_VIDEO_FORMAT_YV12:
       format = CLUTTER_GST_YV12;
+      break;
+    case GST_VIDEO_FORMAT_NV12:
+      format = CLUTTER_GST_NV12;
       break;
     case GST_VIDEO_FORMAT_I420:
       format = CLUTTER_GST_I420;
@@ -951,6 +977,77 @@ static ClutterGstRenderer yv12_glsl_renderer = {
 };
 
 /*
+ * NV12
+ *
+ * 8 bit Y plane followed by interleaved U/V plane containing 8 bit 2x2 subsampled UV
+ */
+
+static gboolean
+clutter_gst_nv12_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  CoglMaterial *material;
+  CoglHandle y_tex, u_tex;
+  GstVideoFrame frame;
+
+  if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
+    goto no_map;
+
+  y_tex =
+    cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 0),
+    GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 0), CLUTTER_GST_TEXTURE_FLAGS,
+    COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[0],
+    frame.data[0]);
+
+  u_tex =
+    cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 1),
+    GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 1), CLUTTER_GST_TEXTURE_FLAGS,
+    COGL_PIXEL_FORMAT_RGB_565, COGL_PIXEL_FORMAT_RGB_565, priv->info.stride[1],
+    frame.data[1]);
+
+  gst_video_frame_unmap (&frame);
+
+  material = cogl_material_copy (priv->material_template);
+
+  cogl_material_set_layer (material, 0, y_tex);
+  cogl_material_set_layer (material, 1, u_tex);
+  cogl_material_set_layer_filters (material, 1,
+      COGL_MATERIAL_FILTER_NEAREST, COGL_MATERIAL_FILTER_NEAREST);
+
+  cogl_handle_unref (y_tex);
+  cogl_handle_unref (u_tex);
+
+  clutter_texture_set_cogl_material (priv->texture, material);
+  cogl_object_unref (material);
+
+  return TRUE;
+
+  /* ERRORS */
+no_map:
+  {
+    GST_ERROR_OBJECT (sink, "Could not map incoming video frame");
+    return FALSE;
+  }
+}
+
+static void
+clutter_gst_nv12_glsl_init (ClutterGstVideoSink * sink)
+{
+  _create_template_material (sink, nv12_to_rgba_shader, TRUE, 2);
+}
+
+
+static ClutterGstRenderer nv12_glsl_renderer = {
+  "NV12 glsl",
+  CLUTTER_GST_NV12,
+  CLUTTER_GST_GLSL | CLUTTER_GST_MULTI_TEXTURE,
+  GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("NV12")),
+  clutter_gst_nv12_glsl_init,
+  clutter_gst_dummy_deinit,
+  clutter_gst_nv12_upload,
+};
+
+/*
  * YV12 (fragment program version)
  *
  * 8 bit Y plane followed by 8 bit 2x2 subsampled V and U planes.
@@ -1263,6 +1360,7 @@ clutter_gst_build_renderers_list (void)
     &rgb24_renderer,
     &rgb32_renderer,
     &yv12_glsl_renderer,
+    &nv12_glsl_renderer,
     &i420_glsl_renderer,
 #ifdef CLUTTER_COGL_HAS_GL
     &yv12_fp_renderer,
