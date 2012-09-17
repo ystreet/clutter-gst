@@ -203,6 +203,8 @@ struct _ClutterGstVideoSinkPrivate
   ClutterTexture *texture;
   CoglMaterial *material_template;
 
+  GstFlowReturn flow_ret;
+
   ClutterGstVideoFormat format;
   gboolean bgr;
   int width;
@@ -240,28 +242,6 @@ static void clutter_gst_video_sink_set_texture (ClutterGstVideoSink * sink,
  * ClutterGstSource implementation
  */
 
-static GSourceFuncs gst_source_funcs;
-
-static ClutterGstSource *
-clutter_gst_source_new (ClutterGstVideoSink * sink)
-{
-  ClutterGstVideoSinkPrivate *priv = sink->priv;
-  GSource *source;
-  ClutterGstSource *gst_source;
-
-  source = g_source_new (&gst_source_funcs, sizeof (ClutterGstSource));
-  gst_source = (ClutterGstSource *) source;
-
-  g_source_set_can_recurse (source, TRUE);
-  g_source_set_priority (source, priv->priority);
-
-  gst_source->sink = sink;
-  g_mutex_init (&gst_source->buffer_lock);
-  gst_source->buffer = NULL;
-
-  return gst_source;
-}
-
 static void
 clutter_gst_source_finalize (GSource * source)
 {
@@ -280,6 +260,8 @@ clutter_gst_source_prepare (GSource * source, gint * timeout)
 {
   ClutterGstSource *gst_source = (ClutterGstSource *) source;
 
+  GST_DEBUG_OBJECT (gst_source->sink, "Preparing GSource");
+
   *timeout = -1;
 
   return gst_source->buffer != NULL;
@@ -289,6 +271,9 @@ static gboolean
 clutter_gst_source_check (GSource * source)
 {
   ClutterGstSource *gst_source = (ClutterGstSource *) source;
+
+  GST_DEBUG_OBJECT (gst_source->sink, "Asking to be dispatched : %d",
+      gst_source->buffer != NULL);
 
   return gst_source->buffer != NULL;
 }
@@ -348,9 +333,11 @@ clutter_gst_parse_caps (GstCaps * caps,
   gboolean bgr;
   ClutterGstRenderer *renderer;
 
+  GST_DEBUG_OBJECT (sink, "save:%d, caps:%" GST_PTR_FORMAT, save, caps);
+
   intersection = gst_caps_intersect (priv->caps, caps);
   if (gst_caps_is_empty (intersection))
-    return FALSE;
+    goto no_intersection;
 
   gst_caps_unref (intersection);
 
@@ -395,17 +382,16 @@ clutter_gst_parse_caps (GstCaps * caps,
       bgr = TRUE;
       break;
     default:
-      break;
+      goto unhandled_format;
   }
 
   /* find a renderer that can display our format */
   renderer = clutter_gst_find_renderer_by_format (sink, format);
-  if (G_UNLIKELY (renderer == NULL)) {
-    GST_ERROR_OBJECT (sink, "could not find a suitable renderer");
-    return FALSE;
-  }
 
-  GST_INFO_OBJECT (sink, "using the %s renderer", renderer->name);
+  if (G_UNLIKELY (renderer == NULL))
+    goto no_suitable_renderer;
+
+  GST_INFO_OBJECT (sink, "found the %s renderer", renderer->name);
 
   if (save) {
     priv->width = width;
@@ -427,14 +413,35 @@ clutter_gst_parse_caps (GstCaps * caps,
     priv->bgr = bgr;
 
     priv->renderer = renderer;
-    GST_INFO_OBJECT (sink, "using the %s renderer", priv->renderer->name);
+    GST_INFO_OBJECT (sink, "storing usage of the %s renderer",
+        priv->renderer->name);
   }
 
   return TRUE;
 
+  /* ERRORS */
+no_intersection:
+  {
+    GST_WARNING_OBJECT (sink,
+        "Incompatible caps, don't intersect with %" GST_PTR_FORMAT, priv->caps);
+    return FALSE;
+  }
+
 unknown_format:
   {
     GST_WARNING_OBJECT (sink, "Could not figure format of input caps");
+    return FALSE;
+  }
+
+unhandled_format:
+  {
+    GST_ERROR_OBJECT (sink, "Provided caps aren't supported by clutter-gst");
+    return FALSE;
+  }
+
+no_suitable_renderer:
+  {
+    GST_ERROR_OBJECT (sink, "could not find a suitable renderer");
     return FALSE;
   }
 }
@@ -490,6 +497,8 @@ clutter_gst_source_dispatch (GSource * source,
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
   GstBuffer *buffer;
 
+  GST_DEBUG ("In dispatch");
+
   g_mutex_lock (&gst_source->buffer_lock);
 
   if (G_UNLIKELY (gst_source->has_new_caps)) {
@@ -497,17 +506,25 @@ clutter_gst_source_dispatch (GSource * source,
         gst_pad_get_current_caps (GST_BASE_SINK_PAD ((GST_BASE_SINK
                 (gst_source->sink))));
 
+    GST_DEBUG_OBJECT (gst_source->sink, "Handling new caps %" GST_PTR_FORMAT,
+        caps);
+
     if (priv->renderer)
       priv->renderer->deinit (gst_source->sink);
 
-    clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+    if (!clutter_gst_parse_caps (caps, gst_source->sink, TRUE))
+      goto negotiation_fail;
     gst_source->has_new_caps = FALSE;
 
     if (!priv->texture) {
-      ClutterActor *stage = clutter_stage_get_default ();
-      ClutterActor *actor = g_object_new (CLUTTER_TYPE_TEXTURE,
-          "disable-slicing", TRUE,
-          NULL);
+      ClutterActor *stage;
+      ClutterActor *actor;
+
+      GST_DEBUG_OBJECT (gst_source->sink,
+          "No existing texture, creating stage and actor");
+      stage = clutter_stage_get_default ();
+      actor =
+          g_object_new (CLUTTER_TYPE_TEXTURE, "disable-slicing", TRUE, NULL);
 
       clutter_gst_video_sink_set_texture (gst_source->sink,
           CLUTTER_TEXTURE (actor));
@@ -520,11 +537,15 @@ clutter_gst_source_dispatch (GSource * source,
       g_signal_connect (stage, "allocation-changed",
           G_CALLBACK (on_stage_allocation_changed), gst_source);
 
-      clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+      /* FIXME : We already call this above ? */
+      if (!clutter_gst_parse_caps (caps, gst_source->sink, TRUE))
+        goto negotiation_fail;
       clutter_actor_set_size (stage, priv->width, priv->height);
       clutter_actor_show (stage);
     } else {
-      clutter_gst_parse_caps (caps, gst_source->sink, TRUE);
+      /* FIXME : We already call this above ? */
+      if (!clutter_gst_parse_caps (caps, gst_source->sink, TRUE))
+        goto negotiation_fail;
     }
 
     priv->renderer->init (gst_source->sink);
@@ -536,14 +557,30 @@ clutter_gst_source_dispatch (GSource * source,
   buffer = gst_source->buffer;
   gst_source->buffer = NULL;
 
+  GST_DEBUG ("buffer:%p", buffer);
+
   g_mutex_unlock (&gst_source->buffer_lock);
 
   if (buffer) {
     priv->renderer->upload (gst_source->sink, buffer);
     gst_buffer_unref (buffer);
-  }
+  } else
+    GST_WARNING_OBJECT (gst_source->sink, "No buffers available for display");
+
+  GST_DEBUG_OBJECT (gst_source->sink, "Done");
 
   return TRUE;
+
+  /* ERRORS */
+negotiation_fail:
+  {
+    GST_WARNING_OBJECT (gst_source->sink,
+        "Failed to handle caps. Stopping GSource");
+    priv->flow_ret = GST_FLOW_NOT_NEGOTIATED;
+    g_mutex_unlock (&gst_source->buffer_lock);
+
+    return FALSE;
+  }
 }
 
 static GSourceFuncs gst_source_funcs = {
@@ -552,6 +589,28 @@ static GSourceFuncs gst_source_funcs = {
   clutter_gst_source_dispatch,
   clutter_gst_source_finalize
 };
+
+static ClutterGstSource *
+clutter_gst_source_new (ClutterGstVideoSink * sink)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  GSource *source;
+  ClutterGstSource *gst_source;
+
+  GST_DEBUG_OBJECT (sink, "Creating new GSource");
+
+  source = g_source_new (&gst_source_funcs, sizeof (ClutterGstSource));
+  gst_source = (ClutterGstSource *) source;
+
+  g_source_set_can_recurse (source, TRUE);
+  g_source_set_priority (source, priv->priority);
+
+  gst_source->sink = sink;
+  g_mutex_init (&gst_source->buffer_lock);
+  gst_source->buffer = NULL;
+
+  return gst_source;
+}
 
 static void
 clutter_gst_video_sink_set_priority (ClutterGstVideoSink * sink, int priority)
@@ -1224,15 +1283,18 @@ clutter_gst_video_sink_render (GstBaseSink * bsink, GstBuffer * buffer)
 
   g_mutex_lock (&gst_source->buffer_lock);
 
-  if (gst_source->stage_lost) {
-    GST_ELEMENT_ERROR (bsink, RESOURCE, CLOSE,
-        ("The window has been closed."), ("The window has been closed."));
-    g_mutex_unlock (&gst_source->buffer_lock);
-    return GST_FLOW_ERROR;
-  }
+  if (G_UNLIKELY (priv->flow_ret != GST_FLOW_OK))
+    goto dispatch_flow_ret;
 
-  if (gst_source->buffer)
+  if (gst_source->stage_lost)
+    goto stage_lost;
+
+  if (gst_source->buffer) {
+    GST_WARNING ("Replacing existing buffer %p (most likely wasn't displayed)",
+        gst_source->buffer);
     gst_buffer_unref (gst_source->buffer);
+  }
+  GST_DEBUG_OBJECT (sink, "Storing buffer %p", buffer);
   gst_source->buffer = gst_buffer_ref (buffer);
 
   g_mutex_unlock (&gst_source->buffer_lock);
@@ -1240,6 +1302,22 @@ clutter_gst_video_sink_render (GstBaseSink * bsink, GstBuffer * buffer)
   g_main_context_wakeup (priv->clutter_main_context);
 
   return GST_FLOW_OK;
+
+  /* ERRORS */
+stage_lost:
+  {
+    g_mutex_unlock (&gst_source->buffer_lock);
+    GST_ELEMENT_ERROR (bsink, RESOURCE, CLOSE,
+        ("The window has been closed."), ("The window has been closed."));
+    return GST_FLOW_ERROR;
+  }
+
+ dispatch_flow_ret:
+  {
+    g_mutex_unlock (&gst_source->buffer_lock);
+    GST_DEBUG_OBJECT (bsink, "Dispatching flow return %s", gst_flow_get_name(priv->flow_ret));
+    return priv->flow_ret;
+  }
 }
 
 static GstCaps *
@@ -1396,7 +1474,11 @@ clutter_gst_video_sink_start (GstBaseSink * base_sink)
   ClutterGstVideoSinkPrivate *priv = sink->priv;
 
   priv->source = clutter_gst_source_new (sink);
+
+  GST_DEBUG_OBJECT (base_sink, "Attaching our GSource to the main context");
   g_source_attach ((GSource *) priv->source, priv->clutter_main_context);
+
+  priv->flow_ret = GST_FLOW_OK;
 
   return TRUE;
 }
@@ -1410,6 +1492,7 @@ clutter_gst_video_sink_stop (GstBaseSink * base_sink)
   if (priv->source) {
     GSource *source = (GSource *) priv->source;
 
+    GST_DEBUG_OBJECT (base_sink, "Stopping our GSource");
     g_source_destroy (source);
     g_source_unref (source);
     priv->source = NULL;
