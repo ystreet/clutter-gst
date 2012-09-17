@@ -27,5 +27,6 @@ missing
 stamp-h1
 
 *.sw?
+*~
 .gdb_history
 TAGS
