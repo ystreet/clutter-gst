@@ -188,7 +188,7 @@ typedef struct _ClutterGstRenderer
 
   void (*init) (ClutterGstVideoSink * sink);
   void (*deinit) (ClutterGstVideoSink * sink);
-  void (*upload) (ClutterGstVideoSink * sink, GstBuffer * buffer);
+  gboolean (*upload) (ClutterGstVideoSink * sink, GstBuffer * buffer);
 } ClutterGstRenderer;
 
 typedef enum _ClutterGstRendererState
@@ -205,12 +205,10 @@ struct _ClutterGstVideoSinkPrivate
 
   GstFlowReturn flow_ret;
 
+  GstVideoInfo info;
+
   ClutterGstVideoFormat format;
   gboolean bgr;
-  int width;
-  int height;
-  int fps_n, fps_d;
-  int par_n, par_d;
 
   GMainContext *clutter_main_context;
   ClutterGstSource *source;
@@ -312,7 +310,7 @@ ensure_texture_pixel_aspect_ratio (ClutterGstVideoSink * sink)
       "pixel-aspect-ratio");
   if (pspec) {
     g_value_init (&par, GST_TYPE_FRACTION);
-    gst_value_set_fraction (&par, priv->par_n, priv->par_d);
+    gst_value_set_fraction (&par, priv->info.par_n, priv->info.par_d);
     g_object_set_property (G_OBJECT (priv->texture),
         "pixel-aspect-ratio", &par);
     g_value_unset (&par);
@@ -326,9 +324,6 @@ clutter_gst_parse_caps (GstCaps * caps,
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   GstCaps *intersection;
   GstVideoInfo vinfo;
-  gint fps_n, fps_d;
-  gint par_n, par_d;
-  gint width, height;
   ClutterGstVideoFormat format;
   gboolean bgr;
   ClutterGstRenderer *renderer;
@@ -343,16 +338,6 @@ clutter_gst_parse_caps (GstCaps * caps,
 
   if (!gst_video_info_from_caps (&vinfo, caps))
     goto unknown_format;
-
-  width = vinfo.width;
-  height = vinfo.height;
-
-  /* We dont yet use fps or pixel aspect into but handy to have */
-  fps_n = vinfo.fps_n;
-  fps_d = vinfo.fps_d;
-
-  par_n = vinfo.par_n;
-  par_d = vinfo.par_d;
 
   switch (vinfo.finfo->format) {
     case GST_VIDEO_FORMAT_YV12:
@@ -394,15 +379,7 @@ clutter_gst_parse_caps (GstCaps * caps,
   GST_INFO_OBJECT (sink, "found the %s renderer", renderer->name);
 
   if (save) {
-    priv->width = width;
-    priv->height = height;
-
-    /* We dont yet use fps or pixel aspect into but handy to have */
-    priv->fps_n = fps_n;
-    priv->fps_d = fps_d;
-
-    priv->par_n = par_n;
-    priv->par_d = par_d;
+    priv->info = vinfo;
 
     /* If we happen to use a ClutterGstVideoTexture, now is to good time
      * to instruct it about the pixel aspect ratio so we can have a
@@ -540,7 +517,7 @@ clutter_gst_source_dispatch (GSource * source,
       /* FIXME : We already call this above ? */
       if (!clutter_gst_parse_caps (caps, gst_source->sink, TRUE))
         goto negotiation_fail;
-      clutter_actor_set_size (stage, priv->width, priv->height);
+      clutter_actor_set_size (stage, priv->info.width, priv->info.height);
       clutter_actor_show (stage);
     } else {
       /* FIXME : We already call this above ? */
@@ -562,7 +539,8 @@ clutter_gst_source_dispatch (GSource * source,
   g_mutex_unlock (&gst_source->buffer_lock);
 
   if (buffer) {
-    priv->renderer->upload (gst_source->sink, buffer);
+    if (!priv->renderer->upload (gst_source->sink, buffer))
+      goto fail_upload;
     gst_buffer_unref (buffer);
   } else
     GST_WARNING_OBJECT (gst_source->sink, "No buffers available for display");
@@ -579,6 +557,14 @@ negotiation_fail:
     priv->flow_ret = GST_FLOW_NOT_NEGOTIATED;
     g_mutex_unlock (&gst_source->buffer_lock);
 
+    return FALSE;
+  }
+
+fail_upload:
+  {
+    GST_WARNING_OBJECT (gst_source->sink, "Failed to upload buffer");
+    priv->flow_ret = GST_FLOW_ERROR;
+    gst_buffer_unref (buffer);
     return FALSE;
   }
 }
@@ -780,29 +766,39 @@ clutter_gst_rgb_init (ClutterGstVideoSink * sink)
  * 3 bytes per pixel, stride % 4 = 0.
  */
 
-static void
+static gboolean
 clutter_gst_rgb24_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   CoglPixelFormat format;
   CoglHandle tex;
-  GstMapInfo info;
+  GstVideoFrame frame;
 
   if (priv->bgr)
     format = COGL_PIXEL_FORMAT_BGR_888;
   else
     format = COGL_PIXEL_FORMAT_RGB_888;
 
-  gst_buffer_map (buffer, &info, GST_MAP_READ);
+  if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
+    goto map_fail;
 
-  tex = cogl_texture_new_from_data (priv->width,
-      priv->height,
+  tex = cogl_texture_new_from_data (priv->info.width,
+      priv->info.height,
       CLUTTER_GST_TEXTURE_FLAGS,
-      format, format, GST_ROUND_UP_4 (3 * priv->width), info.data);
+      format, format, priv->info.stride[0], frame.data[0]);
 
-  gst_buffer_unmap (buffer, &info);
+  gst_video_frame_unmap (&frame);
 
   _create_paint_material (sink, tex, COGL_INVALID_HANDLE, COGL_INVALID_HANDLE);
+
+  return TRUE;
+
+  /* ERRORS */
+map_fail:
+  {
+    GST_ERROR_OBJECT (sink, "Could not map incoming video frame");
+    return FALSE;
+  }
 }
 
 static ClutterGstRenderer rgb24_renderer = {
@@ -819,29 +815,39 @@ static ClutterGstRenderer rgb24_renderer = {
  * RGBA / BGRA 8888
  */
 
-static void
+static gboolean
 clutter_gst_rgb32_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   CoglPixelFormat format;
   CoglHandle tex;
-  GstMapInfo info;
+  GstVideoFrame frame;
 
-  gst_buffer_map (buffer, &info, GST_MAP_READ);
+  if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
+    goto map_fail;
 
   if (priv->bgr)
     format = COGL_PIXEL_FORMAT_BGRA_8888;
   else
     format = COGL_PIXEL_FORMAT_RGBA_8888;
 
-  tex = cogl_texture_new_from_data (priv->width,
-      priv->height,
+  tex = cogl_texture_new_from_data (priv->info.width,
+      priv->info.height,
       CLUTTER_GST_TEXTURE_FLAGS,
-      format, format, GST_ROUND_UP_4 (4 * priv->width), info.data);
+      format, format, priv->info.stride[0], frame.data[0]);
 
-  gst_buffer_unmap (buffer, &info);
+  gst_video_frame_unmap (&frame);
 
   _create_paint_material (sink, tex, COGL_INVALID_HANDLE, COGL_INVALID_HANDLE);
+
+  return TRUE;
+
+  /* ERRORS */
+map_fail:
+  {
+    GST_ERROR_OBJECT (sink, "Could not map incoming video frame");
+    return FALSE;
+  }
 }
 
 static ClutterGstRenderer rgb32_renderer = {
@@ -860,40 +866,46 @@ static ClutterGstRenderer rgb32_renderer = {
  * 8 bit Y plane followed by 8 bit 2x2 subsampled U and V planes.
  */
 
-static void
+static gboolean
 clutter_gst_yv12_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
-  gint y_row_stride = GST_ROUND_UP_4 (priv->width);
-  gint uv_row_stride = GST_ROUND_UP_4 (priv->width / 2);
   CoglHandle y_tex, u_tex, v_tex;
-  GstMapInfo info;
+  GstVideoFrame frame;
 
-  gst_buffer_map (buffer, &info, GST_MAP_READ);
+  if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
+    goto no_map;
 
-  y_tex = cogl_texture_new_from_data (priv->width,
-      priv->height,
-      CLUTTER_GST_TEXTURE_FLAGS,
-      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, y_row_stride, info.data);
+  y_tex =
+      cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 0),
+      GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 0), CLUTTER_GST_TEXTURE_FLAGS,
+      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[0],
+      frame.data[0]);
 
-  u_tex = cogl_texture_new_from_data (priv->width / 2,
-      priv->height / 2,
-      CLUTTER_GST_TEXTURE_FLAGS,
-      COGL_PIXEL_FORMAT_G_8,
-      COGL_PIXEL_FORMAT_G_8,
-      uv_row_stride, info.data + (y_row_stride * priv->height));
+  u_tex =
+      cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 1),
+      GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 1), CLUTTER_GST_TEXTURE_FLAGS,
+      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[1],
+      frame.data[1]);
 
-  v_tex = cogl_texture_new_from_data (priv->width / 2,
-      priv->height / 2,
-      CLUTTER_GST_TEXTURE_FLAGS,
-      COGL_PIXEL_FORMAT_G_8,
-      COGL_PIXEL_FORMAT_G_8,
-      uv_row_stride, info.data + (y_row_stride * priv->height)
-      + (uv_row_stride * priv->height / 2));
+  v_tex =
+      cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 2),
+      GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 2), CLUTTER_GST_TEXTURE_FLAGS,
+      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[2],
+      frame.data[2]);
 
-  gst_buffer_unmap (buffer, &info);
+  gst_video_frame_unmap (&frame);
 
   _create_paint_material (sink, y_tex, u_tex, v_tex);
+
+  return TRUE;
+
+  /* ERRORS */
+no_map:
+  {
+    GST_ERROR_OBJECT (sink, "Could not map incoming video frame");
+    return FALSE;
+  }
 }
 
 static void
@@ -1009,25 +1021,36 @@ clutter_gst_ayuv_glsl_init (ClutterGstVideoSink * sink)
   _create_template_material (sink, ayuv_to_rgba_shader, TRUE, 1);
 }
 
-static void
+static gboolean
 clutter_gst_ayuv_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   CoglHandle tex;
+  GstVideoFrame frame;
   GstMapInfo info;
 
-  gst_buffer_map (buffer, &info, GST_MAP_READ);
+  if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
+    goto map_fail;
 
   tex =
-      cogl_texture_new_from_data (priv->width,
-      priv->height,
+      cogl_texture_new_from_data (priv->info.width,
+      priv->info.height,
       CLUTTER_GST_TEXTURE_FLAGS,
       COGL_PIXEL_FORMAT_RGBA_8888,
-      COGL_PIXEL_FORMAT_RGBA_8888, GST_ROUND_UP_4 (4 * priv->width), info.data);
+      COGL_PIXEL_FORMAT_RGBA_8888, priv->info.stride[0], frame.data[0]);
 
-  gst_buffer_unmap (buffer, &info);
+  gst_video_frame_unmap (&frame);
 
   _create_paint_material (sink, tex, COGL_INVALID_HANDLE, COGL_INVALID_HANDLE);
+
+  return TRUE;
+
+  /* ERRORS */
+map_fail:
+  {
+    GST_ERROR_OBJECT (sink, "Could not map incoming video frame");
+    return FALSE;
+  }
 }
 
 static ClutterGstRenderer ayuv_glsl_renderer = {
@@ -1053,7 +1076,7 @@ clutter_gst_hw_init (ClutterGstVideoSink * sink)
   CoglHandle material;
 
   /* Default texture is 1x1, let's replace it with one big enough. */
-  tex = cogl_texture_new_with_size (priv->width, priv->height,
+  tex = cogl_texture_new_with_size (priv->info.width, priv->info.height,
       CLUTTER_GST_TEXTURE_FLAGS, COGL_PIXEL_FORMAT_BGRA_8888);
 
   material = cogl_material_new ();
@@ -1308,10 +1331,11 @@ stage_lost:
     return GST_FLOW_ERROR;
   }
 
- dispatch_flow_ret:
+dispatch_flow_ret:
   {
     g_mutex_unlock (&gst_source->buffer_lock);
-    GST_DEBUG_OBJECT (bsink, "Dispatching flow return %s", gst_flow_get_name(priv->flow_ret));
+    GST_DEBUG_OBJECT (bsink, "Dispatching flow return %s",
+        gst_flow_get_name (priv->flow_ret));
     return priv->flow_ret;
   }
 }
@@ -1585,9 +1609,9 @@ clutter_gst_navigation_send_event (GstNavigation * navigation,
       return;
     }
 
-    x = x_out * priv->width /
+    x = x_out * priv->info.width /
         clutter_actor_get_width (CLUTTER_ACTOR (priv->texture));
-    y = y_out * priv->height /
+    y = y_out * priv->info.height /
         clutter_actor_get_height (CLUTTER_ACTOR (priv->texture));
 
     gst_structure_set (structure,
