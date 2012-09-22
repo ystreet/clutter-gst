@@ -1081,18 +1081,12 @@ query_duration (ClutterGstPlayer *player)
 }
 
 static void
-bus_message_duration_cb (GstBus           *bus,
-                         GstMessage       *message,
-                         ClutterGstPlayer *player)
+bus_message_duration_changed_cb (GstBus           *bus,
+                                 GstMessage       *message,
+                                 ClutterGstPlayer *player)
 {
-  gint64 duration;
-
-  /* GstElements send a duration message on the bus with GST_CLOCK_TIME_NONE
-   * as duration to signal a new duration */
-  gst_message_parse_duration (message, NULL, &duration);
-  if (G_UNLIKELY ((GstClockTime) duration != GST_CLOCK_TIME_NONE))
-    return;
-
+  /* GstElements send a duration-changed message on the bus to signal
+   * that the duration has changed and should be re-queried */
   query_duration (player);
 }
 
@@ -2037,8 +2031,8 @@ clutter_gst_player_init (ClutterGstPlayer *player)
   g_signal_connect_object (priv->bus, "message::buffering",
 			   G_CALLBACK (bus_message_buffering_cb),
 			   player, 0);
-  g_signal_connect_object (priv->bus, "message::duration",
-			   G_CALLBACK (bus_message_duration_cb),
+  g_signal_connect_object (priv->bus, "message::duration-changed",
+			   G_CALLBACK (bus_message_duration_changed_cb),
 			   player, 0);
   g_signal_connect_object (priv->bus, "message::state-changed",
 			   G_CALLBACK (bus_message_state_change_cb),
