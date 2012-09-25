@@ -1,3 +1,23 @@
+clutter-gst 1.9.92 (26/09/2012)
+===============================================================================
+
+List of chances since 1.9.90
+
+ o Updated Gstreamer 1.0 port to work with the released GStreamer 1.0.0
+
+ o Fix uploading of some videos with odd widths
+
+ o Disable HW decoder support until it is stabilized in GStreamer 1.0
+
+ o autocluttersink now exposes the ts-offset property of the underlying sink
+
+Many Thanks to:
+
+   Edward Hervey
+   Andre Moreira Magalhaes (andrunko)
+   Josep Torra
+   Tim-Philipp Müller
+
 clutter-gst 1.9.90 (22/08/2012)
 ===============================================================================
 
