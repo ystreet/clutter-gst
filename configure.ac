@@ -214,6 +214,7 @@ dnl ========================================================================
 dnl Experimental support for hardware accelerated decoders.
 dnl Temporarily disabling for GStreamer 1.0 since it's causing too many issues
 dnl and the API for hw support isn't yet put in stone
+have_hw_decoder_support=no
 # PKG_CHECK_MODULES(HW,
 #                  [gstreamer-basevideo-$GST_MAJORMINOR >= $GST_PLUGINS_BAD_REQ_VERSION],
 #                  [
