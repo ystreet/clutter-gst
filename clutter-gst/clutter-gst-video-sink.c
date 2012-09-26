@@ -191,13 +191,6 @@ typedef struct _ClutterGstRenderer
   gboolean (*upload) (ClutterGstVideoSink * sink, GstBuffer * buffer);
 } ClutterGstRenderer;
 
-typedef enum _ClutterGstRendererState
-{
-  CLUTTER_GST_RENDERER_STOPPED,
-  CLUTTER_GST_RENDERER_RUNNING,
-  CLUTTER_GST_RENDERER_NEED_GC,
-} ClutterGstRendererState;
-
 struct _ClutterGstVideoSinkPrivate
 {
   ClutterTexture *texture;
