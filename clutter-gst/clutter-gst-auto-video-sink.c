@@ -136,7 +136,8 @@ _factory_filter (GstPluginFeature * feature, gpointer data)
     return FALSE;
 
   /* video sinks */
-  klass = gst_element_factory_get_klass (GST_ELEMENT_FACTORY (feature));
+  klass = gst_element_factory_get_metadata (GST_ELEMENT_FACTORY (feature),
+                                            GST_ELEMENT_METADATA_KLASS);
   if (!(strstr (klass, "Sink") && strstr (klass, "Video")))
     return FALSE;
 
@@ -700,7 +701,7 @@ clutter_gst_auto_video_sink_class_init (ClutterGstAutoVideoSinkClass * klass)
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template_factory));
 
-  gst_element_class_set_details_simple (gstelement_class,
+  gst_element_class_set_metadata (gstelement_class,
       "Auto Clutter Sink",
       "Sink/Video",
       "Autoplug clutter capable video sinks",

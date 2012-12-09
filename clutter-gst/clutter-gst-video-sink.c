@@ -1536,7 +1536,7 @@ clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass * klass)
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sinktemplate_all));
 
-  gst_element_class_set_details_simple (gstelement_class,
+  gst_element_class_set_metadata (gstelement_class,
       "Clutter video sink",
       "Sink/Video",
       "Sends video data from a GStreamer pipeline to a Clutter texture",
