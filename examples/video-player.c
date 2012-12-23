@@ -6,6 +6,7 @@
  * video-player.c - A simple video player with an OSD.
  *
  * Copyright (C) 2007,2008 OpenedHand
+ * Copyright (C) 2013 Collabora
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -30,6 +31,8 @@
 
 #define SEEK_H 14
 #define SEEK_W 440
+
+#define GST_PLAY_FLAG_VIS 1 << 3
 
 typedef struct _VideoApp
 {
@@ -358,11 +361,18 @@ int
 main (int argc, char *argv[])
 {
   VideoApp            *app = NULL;
+  GstElement          *pipe;
+  GstElement          *playsink;
+  GstElement          *goomsource;
+  GstIterator         *iter;
   ClutterActor        *stage;
   ClutterColor         stage_color = { 0x00, 0x00, 0x00, 0x00 };
   ClutterColor         control_color1 = { 73, 74, 77, 0xee };
   ClutterColor         control_color2 = { 0xcc, 0xcc, 0xcc, 0xff };
   GError              *error = NULL;
+  GValue               value = { 0, };
+  char                *sink_name;
+  int                  playsink_flags;
 
   clutter_gst_init_with_args (&argc,
                               &argv,
@@ -429,6 +439,36 @@ main (int argc, char *argv[])
 
   /* Load up out video texture */
   clutter_media_set_filename (CLUTTER_MEDIA (app->vtexture), argv[1]);
+
+  /* Set up things so that a visualisation is played if there's no video */
+  pipe = clutter_gst_video_texture_get_pipeline (CLUTTER_GST_VIDEO_TEXTURE (app->vtexture));
+  if (!pipe)
+    g_error ("Unable to get gstreamer pipeline!\n");
+
+  iter = gst_bin_iterate_sinks (GST_BIN (pipe));
+  if (!iter)
+    g_error ("Unable to iterate over sinks!\n");
+  while (gst_iterator_next (iter, &value) == GST_ITERATOR_OK) {
+    playsink = g_value_get_object (&value);
+    sink_name = gst_element_get_name (playsink);
+    if (g_strcmp0 (sink_name, "playsink") != 0) {
+      g_free (sink_name);
+      break;
+    }
+    g_free (sink_name);
+  }
+  gst_iterator_free (iter);
+
+  goomsource = gst_element_factory_make ("goom", "source");
+  if (!goomsource)
+    g_error ("Unable to create goom visualiser!\n");
+
+  g_object_get (playsink, "flags", &playsink_flags, NULL);
+  playsink_flags |= GST_PLAY_FLAG_VIS;
+  g_object_set (playsink,
+                "vis-plugin", goomsource,
+                "flags", playsink_flags,
+                NULL);
 
   /* Create the control UI */
   app->control = clutter_group_new ();
