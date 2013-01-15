@@ -23,7 +23,7 @@ AC_INIT([clutter-gst], [clutter_gst_version],
 AC_CONFIG_MACRO_DIR([build/autotools])
 AC_CONFIG_AUX_DIR([build/autotools])
 AC_CONFIG_SRCDIR([clutter-gst/clutter-gst.h])
-AM_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 
 AM_INIT_AUTOMAKE([1.9 -Wno-portability foreign no-dist-gzip dist-xz tar-ustar])
 
