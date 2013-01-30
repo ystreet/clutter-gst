@@ -48,7 +48,7 @@ typedef struct _VideoApp
 
   ClutterActor *control_seek1, *control_seek2, *control_seekbar;
 
-  gboolean      controls_showing, paused;
+  gboolean      controls_showing, paused, mouse_in_window;
 
   guint         controls_timeout;
 } VideoApp;
@@ -144,7 +144,8 @@ show_controls (VideoApp *app, gboolean vis)
     {
       app->controls_showing = FALSE;
 
-      clutter_stage_hide_cursor (CLUTTER_STAGE (app->stage));
+      if (app->mouse_in_window)
+        clutter_stage_hide_cursor (CLUTTER_STAGE (app->stage));
       _actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 250,
                       "opacity", 0,
                       NULL);
@@ -280,6 +281,17 @@ input_cb (ClutterStage *stage,
             break;
           }
       }
+
+    case CLUTTER_ENTER:
+      app->mouse_in_window = TRUE;
+      g_object_set (app->stage, "cursor-visible", app->controls_showing, NULL);
+      break;
+
+    case CLUTTER_LEAVE:
+      app->mouse_in_window = FALSE;
+      clutter_stage_show_cursor (CLUTTER_STAGE (app->stage));
+      break;
+
     default:
       break;
     }
