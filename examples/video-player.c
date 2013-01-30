@@ -223,14 +223,12 @@ input_cb (ClutterStage *stage,
           case CLUTTER_d:
             if (app->vtexture)
               {
-                clutter_container_remove_actor (CLUTTER_CONTAINER (app->stage),
-                                                app->vtexture);
+                clutter_actor_remove_child (app->stage, app->vtexture);
                 app->vtexture = NULL;
               }
             if (app->control)
               {
-                clutter_container_remove_actor (CLUTTER_CONTAINER (app->stage),
-                                                app->control);
+                clutter_actor_remove_child (app->stage, app->control);
                 app->control = NULL;
               }
             break;
@@ -494,15 +492,13 @@ main (int argc, char *argv[])
 
   clutter_actor_hide (app->control_play);
 
-  clutter_container_add (CLUTTER_CONTAINER (app->control),
-                         app->control_bg,
-                         app->control_play,
-                         app->control_pause,
-                         app->control_seek1,
-                         app->control_seek2,
-                         app->control_seekbar,
-                         app->control_label,
-                         NULL);
+  clutter_actor_add_child (app->control, app->control_bg);
+  clutter_actor_add_child (app->control, app->control_play);
+  clutter_actor_add_child (app->control, app->control_pause);
+  clutter_actor_add_child (app->control, app->control_seek1);
+  clutter_actor_add_child (app->control, app->control_seek2);
+  clutter_actor_add_child (app->control, app->control_seekbar);
+  clutter_actor_add_child (app->control, app->control_label);
 
   clutter_actor_set_opacity (app->control, 0xee);
 
@@ -519,10 +515,8 @@ main (int argc, char *argv[])
   clutter_actor_set_position (app->control_label, 82, 29);
 
   /* Add control UI to stage */
-  clutter_container_add (CLUTTER_CONTAINER (stage),
-                         app->vtexture,
-                         app->control,
-                         NULL);
+  clutter_actor_add_child (stage, app->vtexture);
+  clutter_actor_add_child (stage, app->control);
 
   position_controls (app, app->control);
 

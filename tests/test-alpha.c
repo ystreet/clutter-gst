@@ -197,7 +197,8 @@ main (int argc, char *argv[])
     g_critical("Could not link elements");
   gst_element_set_state (GST_ELEMENT(pipeline), GST_STATE_PLAYING);
 
-  clutter_container_add (CLUTTER_CONTAINER (stage), rectangle, texture, NULL);
+  clutter_actor_add_child (stage, rectangle);
+  clutter_actor_add_child (stage, texture);
   clutter_actor_show_all (stage);
 
   animation = clutter_actor_animate (texture, CLUTTER_LINEAR, 6000,

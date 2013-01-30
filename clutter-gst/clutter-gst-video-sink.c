@@ -426,8 +426,8 @@ on_stage_destroyed (ClutterStage * stage,
   g_mutex_lock (&gst_source->buffer_lock);
 
   clutter_actor_hide (CLUTTER_ACTOR (stage));
-  clutter_container_remove_actor (CLUTTER_CONTAINER (stage),
-      CLUTTER_ACTOR (priv->texture));
+  clutter_actor_remove_child (CLUTTER_ACTOR (stage),
+                              CLUTTER_ACTOR (priv->texture));
 
   if (gst_source->buffer)
     gst_buffer_unref (gst_source->buffer);
@@ -499,7 +499,7 @@ clutter_gst_source_dispatch (GSource * source,
       clutter_gst_video_sink_set_texture (gst_source->sink,
           CLUTTER_TEXTURE (actor));
       clutter_stage_set_user_resizable (CLUTTER_STAGE (stage), TRUE);
-      clutter_container_add_actor (CLUTTER_CONTAINER (stage), actor);
+      clutter_actor_add_child (stage, actor);
       clutter_stage_set_no_clear_hint (CLUTTER_STAGE (stage), TRUE);
 
       g_signal_connect (stage, "delete-event",

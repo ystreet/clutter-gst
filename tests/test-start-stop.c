@@ -160,7 +160,7 @@ main (int argc, char *argv[])
   clutter_media_set_audio_volume (CLUTTER_MEDIA(video), 0.5);
   clutter_media_set_playing (CLUTTER_MEDIA(video), TRUE);
 
-  clutter_container_add (CLUTTER_CONTAINER(stage), video, NULL);
+  clutter_actor_add_child (stage, video);
   clutter_actor_show_all (stage);
   clutter_main ();
 
