@@ -125,9 +125,9 @@ main (int argc, char *argv[])
   /* start the timeline */
   clutter_timeline_start (timeline);
 
-  clutter_group_add (CLUTTER_GROUP (stage), texture);
+  clutter_actor_add_child (stage, texture);
   // clutter_actor_set_opacity (texture, 0x11);
-  clutter_actor_show_all (stage);
+  clutter_actor_show (stage);
 
   clutter_main();
 

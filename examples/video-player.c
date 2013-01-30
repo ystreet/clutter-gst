@@ -88,6 +88,29 @@ controls_timeout_cb (gpointer data)
   return FALSE;
 }
 
+static ClutterTimeline *
+_actor_animate (ClutterActor         *actor,
+                ClutterAnimationMode  mode,
+                guint                 duration,
+                const gchar          *first_property,
+                ...)
+{
+  va_list args;
+
+  clutter_actor_save_easing_state (actor);
+  clutter_actor_set_easing_mode (actor, mode);
+  clutter_actor_set_easing_duration (actor, duration);
+
+  va_start (args, first_property);
+  g_object_set_valist (G_OBJECT (actor), first_property, args);
+  va_end (args);
+
+  clutter_actor_restore_easing_state (actor);
+
+  return CLUTTER_TIMELINE (clutter_actor_get_transition (actor,
+                                                         first_property));
+}
+
 static void
 show_controls (VideoApp *app, gboolean vis)
 {
@@ -110,9 +133,9 @@ show_controls (VideoApp *app, gboolean vis)
       app->controls_showing = TRUE;
 
       clutter_stage_show_cursor (CLUTTER_STAGE (app->stage));
-      clutter_actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 250,
-                             "opacity", 224,
-                             NULL);
+      _actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 250,
+                      "opacity", 224,
+                      NULL);
 
       return;
     }
@@ -122,9 +145,9 @@ show_controls (VideoApp *app, gboolean vis)
       app->controls_showing = FALSE;
 
       clutter_stage_hide_cursor (CLUTTER_STAGE (app->stage));
-      clutter_actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 250,
-                             "opacity", 0,
-                             NULL);
+      _actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 250,
+                      "opacity", 0,
+                      NULL);
       return;
     }
 }
@@ -154,11 +177,11 @@ toggle_pause_state (VideoApp *app)
 }
 
 static void
-reset_animation (ClutterAnimation *animation,
+reset_animation (ClutterTimeline  *animation,
                  VideoApp         *app)
 {
   if (app->vtexture)
-    clutter_actor_set_rotation (app->vtexture, CLUTTER_Y_AXIS, 0.0, 0, 0, 0);
+    clutter_actor_set_rotation_angle (app->vtexture, CLUTTER_Y_AXIS, 0.0);
 }
 
 static gboolean
@@ -215,8 +238,7 @@ input_cb (ClutterStage *stage,
 
     case CLUTTER_KEY_PRESS:
       {
-        ClutterVertex center = { 0, };
-        ClutterAnimation *animation = NULL;
+        ClutterTimeline *animation = NULL;
 
         switch (clutter_event_get_key_symbol (event))
           {
@@ -241,16 +263,14 @@ input_cb (ClutterStage *stage,
             if (app->vtexture == NULL)
               break;
 
-            center.x = clutter_actor_get_width (app->vtexture) / 2;
+            clutter_actor_set_pivot_point (app->vtexture, 0.5, 0);
 
-            animation =
-              clutter_actor_animate (app->vtexture, CLUTTER_LINEAR, 500,
-                                     "rotation-angle-y", 360.0,
-                                     "fixed::rotation-center-y", &center,
-                                     NULL);
+            animation = _actor_animate (app->vtexture, CLUTTER_LINEAR, 500,
+                                        "rotation-angle-y", 360.0, NULL);
+
             g_signal_connect_after (animation, "completed",
-                              G_CALLBACK (reset_animation),
-                              app);
+                                    G_CALLBACK (reset_animation),
+                                    app);
             handled = TRUE;
             break;
 
@@ -355,6 +375,15 @@ on_video_texture_eos (ClutterMedia *media,
     }
 }
 
+static ClutterActor *
+_new_rectangle_with_color (ClutterColor *color)
+{
+  ClutterActor *actor = clutter_actor_new ();
+  clutter_actor_set_background_color (actor, color);
+
+  return actor;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -393,7 +422,7 @@ main (int argc, char *argv[])
     }
 
   stage = clutter_stage_new ();
-  clutter_stage_set_color (CLUTTER_STAGE (stage), &stage_color);
+  clutter_actor_set_background_color (stage, &stage_color);
   clutter_actor_set_size (stage, 768, 576);
   clutter_stage_set_minimum_size (CLUTTER_STAGE (stage), 640, 480);
   if (opt_fullscreen)
@@ -469,7 +498,7 @@ main (int argc, char *argv[])
                 NULL);
 
   /* Create the control UI */
-  app->control = clutter_group_new ();
+  app->control = clutter_actor_new ();
 
   app->control_bg =
     clutter_texture_new_from_file ("vid-panel.png", NULL);
@@ -480,9 +509,9 @@ main (int argc, char *argv[])
 
   g_assert (app->control_bg && app->control_play && app->control_pause);
 
-  app->control_seek1   = clutter_rectangle_new_with_color (&control_color1);
-  app->control_seek2   = clutter_rectangle_new_with_color (&control_color2);
-  app->control_seekbar = clutter_rectangle_new_with_color (&control_color1);
+  app->control_seek1   = _new_rectangle_with_color (&control_color1);
+  app->control_seek2   = _new_rectangle_with_color (&control_color2);
+  app->control_seekbar = _new_rectangle_with_color (&control_color1);
   clutter_actor_set_opacity (app->control_seekbar, 0x99);
 
   app->control_label =
@@ -521,9 +550,9 @@ main (int argc, char *argv[])
   position_controls (app, app->control);
 
   clutter_stage_hide_cursor (CLUTTER_STAGE (stage));
-  clutter_actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 1000,
-                         "opacity", 0,
-                         NULL);
+  _actor_animate (app->control, CLUTTER_EASE_OUT_QUINT, 1000,
+                  "opacity", 0,
+                  NULL);
 
   /* Hook up other events */
   g_signal_connect (stage, "event", G_CALLBACK (input_cb), app);

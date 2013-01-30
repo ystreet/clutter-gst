@@ -110,11 +110,11 @@ main (int argc, char *argv[])
 
   const ClutterColor     stage_color     = {128,   0, 192, 255};
   const ClutterColor     rectangle_color = { 96,   0,   0, 255};
-  const ClutterGeometry  rectangle_geom  = {110,  70, 100, 100};
+  const ClutterRect      rectangle_geom  = { {110,  70}, {100, 100}};
   ClutterActor          *stage;
   ClutterActor          *texture;
   ClutterActor          *rectangle;
-  ClutterAnimation      *animation;
+  ClutterTransition     *animation;
 
   GstPipeline           *pipeline;
   GstElement            *src;
@@ -142,10 +142,16 @@ main (int argc, char *argv[])
 
   stage = clutter_stage_new ();
   clutter_actor_set_size (stage, 320.0f, 240.0f);
-  clutter_stage_set_color (CLUTTER_STAGE (stage), &stage_color);
+  clutter_actor_set_background_color (stage, &stage_color);
 
-  rectangle = clutter_rectangle_new_with_color (&rectangle_color);
-  clutter_actor_set_geometry (rectangle, &rectangle_geom);
+  rectangle = clutter_actor_new ();
+  clutter_actor_set_background_color (rectangle, &rectangle_color);
+  clutter_actor_set_position (rectangle,
+                              rectangle_geom.origin.x,
+                              rectangle_geom.origin.y);
+  clutter_actor_set_size (rectangle,
+                          rectangle_geom.size.width,
+                          rectangle_geom.size.height);
 
   /* We need to set certain props on the target texture currently for
    * efficient/corrent playback onto the texture (which sucks a bit)
@@ -199,12 +205,18 @@ main (int argc, char *argv[])
 
   clutter_actor_add_child (stage, rectangle);
   clutter_actor_add_child (stage, texture);
-  clutter_actor_show_all (stage);
+  clutter_actor_show (stage);
 
-  animation = clutter_actor_animate (texture, CLUTTER_LINEAR, 6000,
-                                     "opacity", 0xff,
-                                     NULL);
-  clutter_animation_set_loop (animation, TRUE);
+  clutter_actor_save_easing_state (texture);
+  clutter_actor_set_easing_mode (texture, CLUTTER_LINEAR);
+  clutter_actor_set_easing_duration (texture, 6000);
+
+  clutter_actor_set_opacity (texture, 0xff);
+
+  clutter_actor_restore_easing_state (texture);
+
+  animation = clutter_actor_get_transition (texture, "opacity");
+  clutter_timeline_set_repeat_count (CLUTTER_TIMELINE (animation), -1);
 
   clutter_main();
 

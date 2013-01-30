@@ -142,7 +142,7 @@ main (int argc, char *argv[])
   g_assert (error == CLUTTER_INIT_SUCCESS);
 
   stage = clutter_stage_new ();
-  clutter_stage_set_color (CLUTTER_STAGE (stage), &stage_color);
+  clutter_actor_set_background_color (stage, &stage_color);
 
   video = clutter_gst_video_texture_new ();
   g_assert (CLUTTER_GST_IS_VIDEO_TEXTURE(video));
@@ -161,7 +161,7 @@ main (int argc, char *argv[])
   clutter_media_set_playing (CLUTTER_MEDIA(video), TRUE);
 
   clutter_actor_add_child (stage, video);
-  clutter_actor_show_all (stage);
+  clutter_actor_show (stage);
   clutter_main ();
 
   return EXIT_SUCCESS;
