@@ -27,15 +27,15 @@
 #error "Only <clutter-gst/clutter-gst.h> can be included directly."
 #endif
 
+#ifndef __CLUTTER_GST_VERSION_H__
+#define __CLUTTER_GST_VERSION_H__
+
 /**
  * SECTION:clutter-gst-version
  * @short_description: Versioning Macros
  *
  * Version checking macros.
  */
-
-#ifndef __CLUTTER_GST_VERSION_H__
-#define __CLUTTER_GST_VERSION_H__
 
 /**
  * CLUTTER_GST_MAJOR_VERSION:
