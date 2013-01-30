@@ -90,7 +90,7 @@ main (int argc, char *argv[])
     }
   gst_init (&argc, &argv);
 
-  stage = clutter_stage_get_default ();
+  stage = clutter_stage_new ();
 
   /* Make a timeline */
   timeline = clutter_timeline_new (1000);

@@ -141,7 +141,7 @@ main (int argc, char *argv[])
   error = clutter_gst_init (&argc, &argv);
   g_assert (error == CLUTTER_INIT_SUCCESS);
 
-  stage = clutter_stage_get_default ();
+  stage = clutter_stage_new ();
   clutter_stage_set_color (CLUTTER_STAGE (stage), &stage_color);
 
   video = clutter_gst_video_texture_new ();

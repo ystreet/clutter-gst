@@ -132,7 +132,7 @@ main (int argc, char *argv[])
       return EXIT_FAILURE;
     }
 
-  stage = clutter_stage_get_default ();
+  stage = clutter_stage_new ();
   clutter_actor_set_size (CLUTTER_ACTOR (stage), 320.0f, 240.0f);
 
   /* We need to set certain props on the target texture currently for

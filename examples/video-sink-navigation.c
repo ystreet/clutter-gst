@@ -92,7 +92,7 @@ main (int argc, char *argv[])
     }
   gst_init (&argc, &argv);
 
-  stage = clutter_stage_get_default ();
+  stage = clutter_stage_new ();
   clutter_stage_set_user_resizable (CLUTTER_STAGE (stage), TRUE);
 
   /* Make a timeline */

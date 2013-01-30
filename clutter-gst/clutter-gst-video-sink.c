@@ -492,7 +492,7 @@ clutter_gst_source_dispatch (GSource * source,
 
       GST_DEBUG_OBJECT (gst_source->sink,
           "No existing texture, creating stage and actor");
-      stage = clutter_stage_get_default ();
+      stage = clutter_stage_new ();
       actor =
           g_object_new (CLUTTER_TYPE_TEXTURE, "disable-slicing", TRUE, NULL);
 
