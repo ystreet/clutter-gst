@@ -79,6 +79,7 @@ AC_SUBST([CLUTTER_GST_RELEASE_STATUS], [clutter_gst_release_status])
 
 # pkg-config requirements
 GLIB_REQ_VERSION=2.18.0
+COGL_REQ_VERSION=1.10.0
 CLUTTER_REQ_VERSION=1.6.0
 GSTREAMER_REQ_VERSION=1.0.0
 GST_PLUGINS_BAD_REQ_VERSION=1.0.0
@@ -140,6 +141,7 @@ dnl ========================================================================
 
 PKG_CHECK_MODULES(CLUTTER_GST,
                   [clutter-1.0 >= $CLUTTER_REQ_VERSION
+                   cogl-1.0 >= $COGL_REQ_VERSION
                    gio-2.0 >= $GLIB_REQ_VERSION])
 
 dnl ========================================================================
@@ -193,15 +195,10 @@ PKG_CHECK_EXISTS([clutter-osx-1.0],
                  [
                    AC_DEFINE([HAVE_CLUTTER_OSX], [1],
                              ["Defined if building Clutter for OS X"])
-                 ])
-PKG_CHECK_EXISTS([cogl-1.0 >= 1.8.0],
-                 [
-                   have_cogl_1_8=yes
-                   AC_DEFINE([HAVE_COGL_1_8], [1],
-                             ["Defined if cogl-1.0 >= 1.8.0 is available"])
+                   have_cogl_osx=yes
                  ])
 
-AS_IF([test "x$have_cogl_1_8" != xyes],
+AS_IF([test "x$have_cogl_osx" = xyes],
       [
         clutter_soname=`$PKG_CONFIG --variable soname_infix clutter-1.0`
         AS_CASE([$clutter_soname],

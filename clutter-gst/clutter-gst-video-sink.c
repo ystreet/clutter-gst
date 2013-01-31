@@ -45,7 +45,6 @@
 #include "clutter-gst-video-sink.h"
 #include "clutter-gst-util.h"
 #include "clutter-gst-private.h"
-#include "clutter-gst-shaders.h"
 
 #ifdef CLUTTER_COGL_HAS_GL
 /* include assembly shaders */
@@ -78,10 +77,9 @@
 #endif
 
 static gchar *ayuv_to_rgba_shader =
-    FRAGMENT_SHADER_VARS
     "uniform sampler2D tex;"
     "void main () {"
-    "  vec4 color = texture2D (tex, vec2(" TEX_COORD "));"
+    "  vec4 color = texture2D (tex, vec2(cogl_tex_coord_in[0]));"
     "  float y = 1.1640625 * (color.g - 0.0625);"
     "  float u = color.b - 0.5;"
     "  float v = color.a - 0.5;"
@@ -89,15 +87,14 @@ static gchar *ayuv_to_rgba_shader =
     "  color.r = y + 1.59765625 * v;"
     "  color.g = y - 0.390625 * u - 0.8125 * v;"
     "  color.b = y + 2.015625 * u;"
-    "  gl_FragColor = color;" FRAGMENT_SHADER_END "}";
+    "  cogl_color_out = color;}";
 
 static gchar *yv12_to_rgba_shader =
-    FRAGMENT_SHADER_VARS
     "uniform sampler2D ytex;"
     "uniform sampler2D utex;"
     "uniform sampler2D vtex;"
     "void main () {"
-    "  vec2 coord = vec2(" TEX_COORD ");"
+    "  vec2 coord = vec2(cogl_tex_coord_in[0]);"
     "  float y = 1.1640625 * (texture2D (ytex, coord).g - 0.0625);"
     "  float u = texture2D (utex, coord).g - 0.5;"
     "  float v = texture2D (vtex, coord).g - 0.5;"
@@ -105,7 +102,8 @@ static gchar *yv12_to_rgba_shader =
     "  color.r = y + 1.59765625 * v;"
     "  color.g = y - 0.390625 * u - 0.8125 * v;"
     "  color.b = y + 2.015625 * u;"
-    "  color.a = 1.0;" "  gl_FragColor = color;" FRAGMENT_SHADER_END "}";
+    "  color.a = 1.0;"
+    "  cogl_color_out = color;}";
 
 #define BASE_SINK_CAPS "{ AYUV," \
                        "YV12," \
@@ -621,7 +619,7 @@ _string_array_to_char_array (char *dst, const char *src[])
 }
 #endif
 
-#if defined (HAVE_COGL_1_8) && !defined (HAVE_CLUTTER_OSX)
+#if !defined (HAVE_CLUTTER_OSX)
 static gint
 get_n_fragment_texture_units (void)
 {
