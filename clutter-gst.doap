@@ -33,6 +33,14 @@
     </foaf:Person>
   </maintainer>
 
+  <maintainer>
+    <foaf:Person>
+      <foaf:name>Lionel Landwerlin</foaf:name>
+      <foaf:mbox rdf:resource="mailto:llandwerlin@gmail.com"/>
+      <gnome:userid>llandwerlin</gnome:userid>
+    </foaf:Person>
+  </maintainer>
+
   <author>
     <foaf:Person>
       <foaf:name>Jorn Baayen</foaf:name>
@@ -81,6 +89,16 @@
       <location rdf:resource="git://git.clutter-project.org/clutter-gst"/>
     </GitRepository>
   </repository>
+
+  <release>
+    <Version>
+      <name>2.0.2 Release</name>
+      <created>2013-02-26</created>
+      <branch>clutter-gst-2.0</branch>
+      <revision>2.0.2</revision>
+      <file-release rdf:resource="http://download.gnome.org/sources/clutter-gst/2.0/clutter-gst-2.0.2.tar.xz" />
+    </Version>
+  </release>
 
   <release>
     <Version>

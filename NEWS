@@ -1,3 +1,14 @@
+clutter-gst 2.0.2 (26/02/2013)
+===============================================================================
+
+List of changes since 2.0.0
+
+ o Remove usage of ClutterStage/ClutterContainer deprecated APIs
+
+ o Depend on Cogl 1.10 for shaders boilerplate
+
+ o Improve video-player player example on enter/leave event handling
+
 clutter-gst 2.0.0 (22/01/2013)
 ===============================================================================
 
@@ -372,5 +383,5 @@ clutter-gst 0.1.1
 =================
 
 Critical bug fixes;
- - #242 memory leak when playing videos 
+ - #242 memory leak when playing videos
  - #219 clutter-gst apps won't compile with clutter 0.2
