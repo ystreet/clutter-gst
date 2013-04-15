@@ -357,6 +357,9 @@ clutter_gst_parse_caps (GstCaps * caps,
       format = CLUTTER_GST_RGB32;
       bgr = TRUE;
       break;
+    case GST_VIDEO_FORMAT_ENCODED:
+      format = CLUTTER_GST_SURFACE;
+      break;
     default:
       goto unhandled_format;
   }
@@ -1088,13 +1091,13 @@ clutter_gst_hw_deinit (ClutterGstVideoSink * sink)
   priv->converter = NULL;
 }
 
-static void
+static gboolean
 clutter_gst_hw_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   GstSurfaceMeta *surface = gst_buffer_get_surface_meta (buffer);
 
-  g_return_if_fail (surface != NULL);
+  g_return_val_if_fail (surface != NULL, FALSE);
 
   if (G_UNLIKELY (priv->converter == NULL)) {
     CoglHandle tex;
@@ -1110,20 +1113,21 @@ clutter_gst_hw_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 
     priv->converter =
         gst_surface_meta_create_converter (surface, "opengl", &value);
-    g_return_if_fail (priv->converter);
+    g_return_val_if_fail (priv->converter, FALSE);
   }
 
   gst_surface_converter_upload (priv->converter, buffer);
 
   /* The texture is dirty, schedule a redraw */
   clutter_actor_queue_redraw (CLUTTER_ACTOR (priv->texture));
+  return TRUE;
 }
 
 static ClutterGstRenderer hw_renderer = {
   "HW surface",
   CLUTTER_GST_SURFACE,
   0,
-  GST_STATIC_CAPS ("x-video/surface, opengl=true"),
+  GST_STATIC_CAPS ("video/x-surface, opengl=true"),
   clutter_gst_hw_init,
   clutter_gst_hw_deinit,
   clutter_gst_hw_upload,
