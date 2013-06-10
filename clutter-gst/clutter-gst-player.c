@@ -78,10 +78,6 @@ G_DEFINE_INTERFACE_WITH_CODE (ClutterGstPlayer, clutter_gst_player, G_TYPE_OBJEC
                        clutter_gst_player_private_quark,        \
                        private))
 
-#define PLAYER_GET_CLASS_PRIVATE(player)                     \
-  (g_type_get_qdata (G_OBJECT_TYPE (player),                 \
-                     clutter_gst_player_class_quark))
-
 /* idle timeouts (in ms) */
 #define TICK_TIMEOUT        500
 #define BUFFERING_TIMEOUT   250
@@ -200,6 +196,18 @@ static guint signals[LAST_SIGNAL] = { 0, };
 static gboolean player_buffering_timeout (gpointer data);
 
 /* Logic */
+static ClutterGstPlayerIfacePrivate *
+clutter_gst_player_get_class_iface_priv (GObject *object)
+{
+  GType k = G_OBJECT_TYPE (object);
+  ClutterGstPlayerIfacePrivate *ret = NULL;
+  while (k != 0 && ret == NULL)
+    {
+      ret = g_type_get_qdata (k, clutter_gst_player_class_quark);
+      k = g_type_parent (k);
+    }
+  return ret;
+}
 
 #ifdef CLUTTER_GST_ENABLE_DEBUG
 static gchar *
@@ -1422,7 +1430,8 @@ clutter_gst_player_set_property (GObject      *object,
       break;
 
     default:
-      iface_priv = PLAYER_GET_CLASS_PRIVATE (object);
+      iface_priv = clutter_gst_player_get_class_iface_priv (object);
+      g_assert (iface_priv != NULL);
       iface_priv->set_property (object, property_id, value, pspec);
     }
 }
@@ -1531,7 +1540,7 @@ clutter_gst_player_get_property (GObject    *object,
       break;
 
     default:
-      iface_priv = PLAYER_GET_CLASS_PRIVATE (object);
+      iface_priv = clutter_gst_player_get_class_iface_priv (object);
       iface_priv->get_property (object, property_id, value, pspec);
     }
 }
