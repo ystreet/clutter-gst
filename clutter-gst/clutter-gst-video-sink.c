@@ -59,6 +59,11 @@
 #include <gst/video/navigation.h>
 #include <gst/riff/riff-ids.h>
 
+#ifdef CLUTTER_WINDOWING_X11
+#include <cogl/cogl-texture-pixmap-x11.h>
+#include <clutter/x11/clutter-x11.h>
+#endif
+
 #ifdef HAVE_HW_DECODER_SUPPORT
 #define GST_USE_UNSTABLE_API 1
 #include <gst/video/gstsurfacemeta.h>
@@ -213,6 +218,10 @@ struct _ClutterGstVideoSinkPrivate
 
 #ifdef HAVE_HW_DECODER_SUPPORT
   GstSurfaceConverter *converter;
+
+#ifdef CLUTTER_WINDOWING_X11
+  Pixmap pixmap;
+#endif
 #endif
 };
 
@@ -1095,8 +1104,7 @@ clutter_gst_hw_init_texture (ClutterGstVideoSink * sink,
   if (!tex)
     return FALSE;
 
-  if (!clutter_gst_hw_set_texture (sink, tex))
-  {
+  if (!clutter_gst_hw_set_texture (sink, tex)) {
     cogl_object_unref (tex);
     return FALSE;
   }
@@ -1111,6 +1119,54 @@ clutter_gst_hw_init_texture (ClutterGstVideoSink * sink,
   return priv->converter != NULL;
 }
 
+static gboolean
+clutter_gst_hw_init_pixmap (ClutterGstVideoSink * sink,
+    GstSurfaceMeta * surface, GstBuffer * buffer)
+{
+#ifdef CLUTTER_WINDOWING_X11
+  ClutterGstVideoSinkPrivate * const priv = sink->priv;
+  Display * const dpy = clutter_x11_get_default_display ();
+  int screen = clutter_x11_get_default_screen ();
+  ClutterBackend *backend;
+  CoglContext *context;
+  CoglHandle tex;
+  GValue value = { 0 };
+
+  priv->pixmap = XCreatePixmap(dpy, clutter_x11_get_root_window (),
+      priv->info.width, priv->info.height, DefaultDepth (dpy, screen));
+  if (!priv->pixmap)
+    return FALSE;
+
+  backend = clutter_get_default_backend ();
+  context = clutter_backend_get_cogl_context (backend);
+  tex = cogl_texture_pixmap_x11_new (context, priv->pixmap, FALSE, NULL);
+  if (!tex)
+    goto error;
+  if (!cogl_texture_pixmap_x11_is_using_tfp_extension (tex))
+    goto error;
+  if (!clutter_gst_hw_set_texture (sink, tex))
+    goto error;
+
+  g_value_init (&value, G_TYPE_UINT);
+  g_value_set_uint (&value, priv->pixmap);
+
+  priv->converter =
+    gst_surface_meta_create_converter (surface, "x11-pixmap", &value);
+  if (!priv->converter)
+    goto error;
+  return TRUE;
+
+  /* ERRORS */
+ error:
+  if (tex)
+    cogl_object_unref (tex);
+  XFreePixmap (dpy, priv->pixmap);
+  priv->pixmap = None;
+  return FALSE;
+#endif
+  return FALSE;
+}
+
 static void
 clutter_gst_hw_init (ClutterGstVideoSink * sink)
 {
@@ -1120,6 +1176,13 @@ static void
 clutter_gst_hw_deinit (ClutterGstVideoSink * sink)
 {
   ClutterGstVideoSinkPrivate *priv = sink->priv;
+
+#ifdef CLUTTER_WINDOWING_X11
+  if (priv->pixmap != None) {
+    XFreePixmap (clutter_x11_get_default_display (), priv->pixmap);
+    priv->pixmap = None;
+  }
+#endif
 
   if (priv->converter != NULL)
     g_object_unref (priv->converter);
@@ -1136,6 +1199,8 @@ clutter_gst_hw_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 
   if (G_UNLIKELY (priv->converter == NULL)) {
     do {
+      if (clutter_gst_hw_init_pixmap (sink, surface, buffer))
+        break;
       if (clutter_gst_hw_init_texture (sink, surface, buffer))
         break;
     } while (0);
