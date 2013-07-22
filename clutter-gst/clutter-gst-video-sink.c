@@ -1062,23 +1062,58 @@ static ClutterGstRenderer ayuv_glsl_renderer = {
  */
 
 #ifdef HAVE_HW_DECODER_SUPPORT
-static void
-clutter_gst_hw_init (ClutterGstVideoSink * sink)
+static gboolean
+clutter_gst_hw_set_texture (ClutterGstVideoSink * sink, CoglTexture * tex)
 {
-  ClutterGstVideoSinkPrivate *priv = sink->priv;
-  CoglHandle tex;
+  ClutterGstVideoSinkPrivate * const priv = sink->priv;
   CoglHandle material;
 
-  /* Default texture is 1x1, let's replace it with one big enough. */
-  tex = cogl_texture_new_with_size (priv->info.width, priv->info.height,
-      CLUTTER_GST_TEXTURE_FLAGS, COGL_PIXEL_FORMAT_BGRA_8888);
-
   material = cogl_material_new ();
+  if (!material)
+    return FALSE;
   cogl_material_set_layer (material, 0, tex);
   clutter_texture_set_cogl_material (priv->texture, material);
 
   cogl_object_unref (tex);
   cogl_object_unref (material);
+  return TRUE;
+}
+
+static gboolean
+clutter_gst_hw_init_texture (ClutterGstVideoSink * sink,
+    GstSurfaceMeta * surface, GstBuffer * buffer)
+{
+  ClutterGstVideoSinkPrivate * const priv = sink->priv;
+  CoglHandle tex;
+  unsigned int gl_texture;
+  unsigned int gl_target;
+  GValue value = { 0 };
+
+  /* Default texture is 1x1, let's replace it with one big enough. */
+  tex = cogl_texture_new_with_size (priv->info.width, priv->info.height,
+      CLUTTER_GST_TEXTURE_FLAGS, COGL_PIXEL_FORMAT_BGRA_8888);
+  if (!tex)
+    return FALSE;
+
+  if (!clutter_gst_hw_set_texture (sink, tex))
+  {
+    cogl_object_unref (tex);
+    return FALSE;
+  }
+
+  cogl_texture_get_gl_texture (tex, &gl_texture, &gl_target);
+
+  g_value_init (&value, G_TYPE_UINT);
+  g_value_set_uint (&value, gl_texture);
+
+  priv->converter =
+    gst_surface_meta_create_converter (surface, "opengl", &value);
+  return priv->converter != NULL;
+}
+
+static void
+clutter_gst_hw_init (ClutterGstVideoSink * sink)
+{
 }
 
 static void
@@ -1100,19 +1135,10 @@ clutter_gst_hw_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
   g_return_val_if_fail (surface != NULL, FALSE);
 
   if (G_UNLIKELY (priv->converter == NULL)) {
-    CoglHandle tex;
-    unsigned int gl_texture;
-    unsigned int gl_target;
-    GValue value = { 0 };
-
-    tex = clutter_texture_get_cogl_texture (priv->texture);
-    cogl_texture_get_gl_texture (tex, &gl_texture, &gl_target);
-
-    g_value_init (&value, G_TYPE_UINT);
-    g_value_set_uint (&value, gl_texture);
-
-    priv->converter =
-        gst_surface_meta_create_converter (surface, "opengl", &value);
+    do {
+      if (clutter_gst_hw_init_texture (sink, surface, buffer))
+        break;
+    } while (0);
     g_return_val_if_fail (priv->converter, FALSE);
   }
 
