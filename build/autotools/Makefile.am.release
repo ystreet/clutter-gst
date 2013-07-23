@@ -4,9 +4,6 @@
 
 TAR_OPTIONS = --owner=0 --group=0
 
-RELEASE_URL_BASE = http://source.clutter-project.org/sources/clutter-gst
-RELEASE_URL      = $(RELEASE_URL_BASE)/$(CLUTTER_GST_MAJOR_VERSION).$(CLUTTER_GST_MINOR_VERSION)
-
 GNOME_RELEASE_URL_BASE = http://download.gnome.org/sources/clutter-gst
 GNOME_RELEASE_URL      = $(GNOME_RELEASE_URL_BASE)/$(CLUTTER_GST_MAJOR_VERSION).$(CLUTTER_GST_MINOR_VERSION)
 
@@ -43,14 +40,12 @@ release-verify-even-micro:
 
 release-upload: $(sha256_file)
 	@echo "Uploading to master.gnome.org..."
-	@scp $(tar_file) dlespiau@master.gnome.org:
+	@scp $(tar_file) llandwerlin@master.gnome.org:
 	@echo "Running ftpadmin install..."
-	@ssh dlespiau@master.gnome.org ftpadmin install $(tar_file)
+	@ssh llandwerlin@master.gnome.org ftpadmin install $(tar_file)
 	@echo "Done."
 
 release-message: $(sha256_file)
-	@echo "Release URL: $(RELEASE_URL)/$(tar_file)"
-	@echo "Release checksum: $(RELEASE_URL)/$(sha256_file)"
 	@echo "Send an email to: $(RELEASE_ANNOUNCE_LIST)"
 	@echo "  Subject: $(PACKAGE) $(CLUTTER_GST_VERSION) ($(CLUTTER_GST_RELEASE_STATUS))"
 	@echo "Contents:"
@@ -59,7 +54,6 @@ release-message: $(sha256_file)
 	@echo ""
 	@echo "A new $(PACKAGE) $(CLUTTER_GST_RELEASE_STATUS) is now available at:"
 	@echo ""
-	@echo "  $(RELEASE_URL)/$(tar_file)"
 	@echo "  $(GNOME_RELEASE_URL)/$(tar_file)"
 	@echo ""
 	@echo "SHA256 Checksum:"
