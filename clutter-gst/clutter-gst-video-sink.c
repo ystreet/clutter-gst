@@ -1030,7 +1030,6 @@ clutter_gst_ayuv_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
   ClutterGstVideoSinkPrivate *priv = sink->priv;
   CoglHandle tex;
   GstVideoFrame frame;
-  GstMapInfo info;
 
   if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
     goto map_fail;
@@ -1308,7 +1307,7 @@ navigation_event (ClutterActor * actor,
   if (event->type == CLUTTER_MOTION) {
     ClutterMotionEvent *mevent = (ClutterMotionEvent *) event;
 
-    GST_DEBUG ("Received mouse move event to %d,%d", mevent->x, mevent->y);
+    GST_DEBUG ("Received mouse move event to %.2f,%.2f", mevent->x, mevent->y);
     gst_navigation_send_mouse_event (GST_NAVIGATION (sink),
         "mouse-move", 0, mevent->x, mevent->y);
   } else if (event->type == CLUTTER_BUTTON_PRESS ||
@@ -1316,7 +1315,7 @@ navigation_event (ClutterActor * actor,
     ClutterButtonEvent *bevent = (ClutterButtonEvent *) event;
     const char *type;
 
-    GST_DEBUG ("Received button %s event at %d,%d",
+    GST_DEBUG ("Received button %s event at %.2f,%.2f",
         (event->type == CLUTTER_BUTTON_PRESS) ? "press" : "release",
         bevent->x, bevent->y);
     type =
