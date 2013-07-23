@@ -1,3 +1,18 @@
+clutter-gst 2.0.6 (24/05/2013)
+===============================================================================
+
+List of changes since 2.0.4
+
+ o Fix a bug when subclassing ClutterGstPlayer class
+
+ o Add support of X11 pixmap as video texture when decoding with
+   Gstreamer-vaapi
+
+Many Thanks to:
+
+    Gwenole Beauchesne
+    Sjoerd Simons
+
 clutter-gst 2.0.4 (24/05/2013)
 ===============================================================================
 
