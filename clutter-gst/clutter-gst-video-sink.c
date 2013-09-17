@@ -1122,46 +1122,49 @@ static gboolean
 clutter_gst_hw_init_pixmap (ClutterGstVideoSink * sink,
     GstSurfaceMeta * surface, GstBuffer * buffer)
 {
-#ifdef CLUTTER_WINDOWING_X11
   ClutterGstVideoSinkPrivate * const priv = sink->priv;
-  Display * const dpy = clutter_x11_get_default_display ();
-  int screen = clutter_x11_get_default_screen ();
-  ClutterBackend *backend;
-  CoglContext *context;
-  CoglHandle tex;
-  GValue value = { 0 };
+#ifdef CLUTTER_WINDOWING_X11
+  if (clutter_check_windowing_backend (CLUTTER_WINDOWING_X11))
+    {
+      Display * const dpy = clutter_x11_get_default_display ();
+      int screen = clutter_x11_get_default_screen ();
+      ClutterBackend *backend;
+      CoglContext *context;
+      CoglHandle tex;
+      GValue value = { 0 };
 
-  priv->pixmap = XCreatePixmap(dpy, clutter_x11_get_root_window (),
-      priv->info.width, priv->info.height, DefaultDepth (dpy, screen));
-  if (!priv->pixmap)
-    return FALSE;
+      priv->pixmap = XCreatePixmap(dpy, clutter_x11_get_root_window (),
+                                   priv->info.width, priv->info.height, DefaultDepth (dpy, screen));
+      if (!priv->pixmap)
+        return FALSE;
 
-  backend = clutter_get_default_backend ();
-  context = clutter_backend_get_cogl_context (backend);
-  tex = cogl_texture_pixmap_x11_new (context, priv->pixmap, FALSE, NULL);
-  if (!tex)
-    goto error;
-  if (!cogl_texture_pixmap_x11_is_using_tfp_extension (tex))
-    goto error;
-  if (!clutter_gst_hw_set_texture (sink, tex))
-    goto error;
+      backend = clutter_get_default_backend ();
+      context = clutter_backend_get_cogl_context (backend);
+      tex = cogl_texture_pixmap_x11_new (context, priv->pixmap, FALSE, NULL);
+      if (!tex)
+        goto error;
+      if (!cogl_texture_pixmap_x11_is_using_tfp_extension (tex))
+        goto error;
+      if (!clutter_gst_hw_set_texture (sink, tex))
+        goto error;
 
-  g_value_init (&value, G_TYPE_UINT);
-  g_value_set_uint (&value, priv->pixmap);
+      g_value_init (&value, G_TYPE_UINT);
+      g_value_set_uint (&value, priv->pixmap);
 
-  priv->converter =
-    gst_surface_meta_create_converter (surface, "x11-pixmap", &value);
-  if (!priv->converter)
-    goto error;
-  return TRUE;
+      priv->converter =
+        gst_surface_meta_create_converter (surface, "x11-pixmap", &value);
+      if (!priv->converter)
+        goto error;
+      return TRUE;
 
-  /* ERRORS */
- error:
-  if (tex)
-    cogl_object_unref (tex);
-  XFreePixmap (dpy, priv->pixmap);
-  priv->pixmap = None;
-  return FALSE;
+      /* ERRORS */
+    error:
+      if (tex)
+        cogl_object_unref (tex);
+      XFreePixmap (dpy, priv->pixmap);
+      priv->pixmap = None;
+      return FALSE;
+    }
 #endif
   return FALSE;
 }

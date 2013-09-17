@@ -2075,8 +2075,9 @@ clutter_gst_player_init (ClutterGstPlayer *player)
                     player);
 
 #if defined(CLUTTER_WINDOWING_X11) && defined (HAVE_HW_DECODER_SUPPORT)
-  gst_bus_set_sync_handler (priv->bus, on_sync_message,
-      clutter_x11_get_default_display (), NULL);
+  if (clutter_check_windowing_backend (CLUTTER_WINDOWING_X11))
+    gst_bus_set_sync_handler (priv->bus, on_sync_message,
+                              clutter_x11_get_default_display (), NULL);
 #endif
 
   gst_object_unref (GST_OBJECT (priv->bus));
