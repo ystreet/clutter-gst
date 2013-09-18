@@ -1205,14 +1205,16 @@ on_volume_changed_main_context (gpointer data)
 {
   ClutterGstPlayer *player = CLUTTER_GST_PLAYER (data);
   ClutterGstPlayerPrivate *priv = PLAYER_GET_PRIVATE (player);
-  gdouble volume;
 
-  volume =
-    gst_stream_volume_get_volume (GST_STREAM_VOLUME (priv->pipeline),
-                                  GST_STREAM_VOLUME_FORMAT_CUBIC);
-  priv->volume = volume;
+  if (priv)
+    {
+      gdouble volume =
+        gst_stream_volume_get_volume (GST_STREAM_VOLUME (priv->pipeline),
+                                      GST_STREAM_VOLUME_FORMAT_CUBIC);
+      priv->volume = volume;
 
-  g_object_notify (G_OBJECT (player), "audio-volume");
+      g_object_notify (G_OBJECT (player), "audio-volume");
+    }
 
   g_object_unref (player);
 
@@ -1261,12 +1263,15 @@ on_audio_changed_main_context (gpointer data)
   ClutterGstPlayer *player = CLUTTER_GST_PLAYER (data);
   ClutterGstPlayerPrivate *priv = PLAYER_GET_PRIVATE (player);
 
-  free_tags_list (&priv->audio_streams);
-  priv->audio_streams = get_tags (priv->pipeline, "n-audio", "get-audio-tags");
+  if (priv)
+    {
+      free_tags_list (&priv->audio_streams);
+      priv->audio_streams = get_tags (priv->pipeline, "n-audio", "get-audio-tags");
 
-  CLUTTER_GST_NOTE (AUDIO_STREAM, "audio-streams changed");
+      CLUTTER_GST_NOTE (AUDIO_STREAM, "audio-streams changed");
 
-  g_object_notify (G_OBJECT (player), "audio-streams");
+      g_object_notify (G_OBJECT (player), "audio-streams");
+    }
 
   g_object_unref (player);
 
@@ -1323,12 +1328,15 @@ on_text_changed_main_context (gpointer data)
   ClutterGstPlayer *player = CLUTTER_GST_PLAYER (data);
   ClutterGstPlayerPrivate *priv = PLAYER_GET_PRIVATE (player);
 
-  free_tags_list (&priv->subtitle_tracks);
-  priv->subtitle_tracks = get_tags (priv->pipeline, "n-text", "get-text-tags");
+  if (priv)
+    {
+      free_tags_list (&priv->subtitle_tracks);
+      priv->subtitle_tracks = get_tags (priv->pipeline, "n-text", "get-text-tags");
 
-  CLUTTER_GST_NOTE (AUDIO_STREAM, "subtitle-tracks changed");
+      CLUTTER_GST_NOTE (AUDIO_STREAM, "subtitle-tracks changed");
 
-  g_object_notify (G_OBJECT (player), "subtitle-tracks");
+      g_object_notify (G_OBJECT (player), "subtitle-tracks");
+    }
 
   g_object_unref (player);
 
