@@ -1518,6 +1518,9 @@ clutter_gst_video_sink_set_texture (ClutterGstVideoSink * sink,
       g_signal_handler_disconnect (priv->texture, id);
     }
     g_array_set_size (priv->signal_handler_ids, 0);
+
+    g_object_remove_weak_pointer (G_OBJECT (priv->texture),
+                                  (gpointer *) & (priv->texture));
   }
 
   priv->texture = texture;
