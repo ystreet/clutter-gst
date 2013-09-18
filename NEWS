@@ -1,3 +1,19 @@
+clutter-gst 2.0.8 (18/09/2013)
+===============================================================================
+
+List of changes since 2.0.6
+
+ o Fix a crash in ClutterGstPlayer when disposing instances too fast
+
+ o Fix a crash in ClutterGstVideoSink
+
+ o Fix a crash in ClutterGstVideoSink when running on Wayland with X11
+   backend compiled
+
+Many Thanks to:
+
+    Thomas Wood
+
 clutter-gst 2.0.6 (24/05/2013)
 ===============================================================================
 
