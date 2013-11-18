@@ -140,13 +140,21 @@ static gchar *yv12_to_rgba_shader =
                        "RGB," \
                        "BGR }"
 
+#define BASE_GL_SINK_CAPS "{ RGBA }"
+
+#define GL_SINK_CAPS GST_VIDEO_CAPS_MAKE_WITH_FEATURES(     \
+    GST_CAPS_FEATURE_META_GST_VIDEO_GL_TEXTURE_UPLOAD_META, \
+    BASE_GL_SINK_CAPS)
 
 #define SINK_CAPS GST_VIDEO_CAPS_MAKE(BASE_SINK_CAPS)
 
 static GstStaticPadTemplate sinktemplate_all = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (SINK_CAPS));
+    GST_STATIC_CAPS (
+        GL_SINK_CAPS ";"
+        SINK_CAPS
+    ));
 
 GST_DEBUG_CATEGORY_STATIC (clutter_gst_video_sink_debug);
 #define GST_CAT_DEFAULT clutter_gst_video_sink_debug
@@ -168,7 +176,8 @@ typedef enum
   CLUTTER_GST_YV12,
   CLUTTER_GST_NV12,
   CLUTTER_GST_I420,
-  CLUTTER_GST_SURFACE
+  CLUTTER_GST_SURFACE,
+  CLUTTER_GST_GL_TEXTURE_UPLOAD,
 } ClutterGstVideoFormat;
 
 /*
@@ -196,6 +205,7 @@ typedef struct _ClutterGstSource
   GstBuffer *buffer;
   gboolean has_new_caps;
   gboolean stage_lost;
+  gboolean has_gl_texture_upload_meta;
 } ClutterGstSource;
 
 /*
@@ -400,6 +410,9 @@ clutter_gst_parse_caps (GstCaps * caps,
       goto unhandled_format;
   }
 
+  if (priv->source->has_gl_texture_upload_meta)
+    format = CLUTTER_GST_GL_TEXTURE_UPLOAD;
+
   /* find a renderer that can display our format */
   renderer = clutter_gst_find_renderer_by_format (sink, format);
 
@@ -500,6 +513,7 @@ static gboolean
 clutter_gst_source_dispatch (GSource * source,
     GSourceFunc callback, gpointer user_data)
 {
+  GstVideoGLTextureUploadMeta *upload_meta;
   ClutterGstSource *gst_source = (ClutterGstSource *) source;
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
   GstBuffer *buffer;
@@ -507,6 +521,19 @@ clutter_gst_source_dispatch (GSource * source,
   GST_DEBUG ("In dispatch");
 
   g_mutex_lock (&gst_source->buffer_lock);
+
+#ifdef CLUTTER_COGL_HAS_GL
+  if (!gst_source->has_gl_texture_upload_meta &&
+      (upload_meta = gst_buffer_get_video_gl_texture_upload_meta (gst_source->buffer))) {
+    if (priv->renderer)
+      priv->renderer->deinit (gst_source->sink);
+
+    priv->renderer = clutter_gst_find_renderer_by_format (gst_source->sink,
+        CLUTTER_GST_GL_TEXTURE_UPLOAD);
+
+    gst_source->has_gl_texture_upload_meta = TRUE;
+  }
+#endif
 
   if (G_UNLIKELY (gst_source->has_new_caps)) {
     GstCaps *caps =
@@ -1364,6 +1391,134 @@ static ClutterGstRenderer hw_renderer = {
 };
 #endif
 
+#ifdef CLUTTER_COGL_HAS_GL
+
+typedef struct {
+  gboolean is_initialized;
+} GLTextureUploadRendererContext;
+
+static void
+clutter_gst_gl_texture_upload_init (ClutterGstVideoSink * sink)
+{
+  ClutterGstRenderer *renderer = sink->priv->renderer;
+
+  if (renderer->context)
+    return;
+
+  renderer->context = g_new0 (GLTextureUploadRendererContext, 1);
+  if (!renderer->context) {
+    GST_ERROR ("Failed to allocate renderer context");
+  }
+}
+
+static void
+clutter_gst_gl_texture_upload_deinit (ClutterGstVideoSink * sink)
+{
+  ClutterGstRenderer *renderer = sink->priv->renderer;
+
+  if (!renderer->context)
+    return;
+
+  g_free (renderer->context);
+  renderer->context = NULL;
+}
+
+static gboolean
+clutter_gst_gl_texture_upload_init_texture (ClutterGstVideoSink * sink)
+{
+  CoglHandle material;
+  CoglTexture *tex = NULL;
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  ClutterGstRenderer *renderer = sink->priv->renderer;
+  GLTextureUploadRendererContext *context = renderer->context;
+
+  tex = cogl_texture_new_with_size (priv->info.width, priv->info.height,
+      CLUTTER_GST_TEXTURE_FLAGS, COGL_PIXEL_FORMAT_RGBA_8888);
+
+  if (!tex) {
+    GST_WARNING ("Couldn't create cogl texture");
+    return FALSE;
+  }
+
+  material = cogl_material_new ();
+  if (!material) {
+    GST_WARNING ("Couldn't create cogl material");
+    return FALSE;
+  }
+  cogl_material_set_layer (material, 0, tex);
+  clutter_texture_set_cogl_material (priv->texture, material);
+
+  cogl_object_unref (tex);
+  cogl_object_unref (material);
+
+  context->is_initialized = TRUE;
+  return TRUE;
+}
+
+static gboolean
+clutter_gst_gl_texture_upload_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
+{
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
+  ClutterGstRenderer *renderer = sink->priv->renderer;
+  GLTextureUploadRendererContext *context = renderer->context;
+  GstVideoGLTextureUploadMeta *upload_meta = NULL;
+  CoglTexture *tex;
+  guint gl_handle[4], gl_target[4];
+
+  if (!context) {
+    GST_WARNING ("Couldn't get the renderer context");
+    return FALSE;
+  }
+
+  if (!context->is_initialized) {
+    gboolean ret = clutter_gst_gl_texture_upload_init_texture (sink);
+    if (!ret)
+      return ret;
+  }
+
+  upload_meta = gst_buffer_get_video_gl_texture_upload_meta (buffer);
+  if (!upload_meta) {
+    GST_WARNING ("Buffer does not support GLTextureUploadMeta API");
+    return FALSE;
+  }
+
+  if (upload_meta->n_textures != 1 ||
+      upload_meta->texture_type[0] != GST_VIDEO_GL_TEXTURE_TYPE_RGBA) {
+    GST_WARNING ("clutter-video-sink only supports gl upload in a single RGBA texture");
+    return FALSE;
+  }
+
+  if (!(tex = clutter_texture_get_cogl_texture (priv->texture))) {
+    GST_WARNING ("Couldn't get Cogl texture");
+    return FALSE;
+  }
+
+  if (!cogl_texture_get_gl_texture (tex, gl_handle, gl_target)) {
+    GST_WARNING ("Couldn't get GL texture");
+    return FALSE;
+  }
+
+  if (!gst_video_gl_texture_upload_meta_upload (upload_meta, gl_handle)) {
+    GST_WARNING ("GL texture upload failed");
+    return FALSE;
+  }
+
+  clutter_actor_queue_redraw (CLUTTER_ACTOR (priv->texture));
+  return TRUE;
+}
+
+static ClutterGstRenderer gl_texture_upload_renderer = {
+    "GL Texture upload renderer",
+    CLUTTER_GST_GL_TEXTURE_UPLOAD,
+    0,
+    GST_STATIC_CAPS (GL_SINK_CAPS),
+    NULL,
+    clutter_gst_gl_texture_upload_init,
+    clutter_gst_gl_texture_upload_deinit,
+    clutter_gst_gl_texture_upload_upload,
+};
+#endif
+
 static GSList *
 clutter_gst_build_renderers_list (void)
 {
@@ -1387,6 +1542,9 @@ clutter_gst_build_renderers_list (void)
     &ayuv_glsl_renderer,
 #ifdef HAVE_HW_DECODER_SUPPORT
     &hw_renderer,
+#endif
+#ifdef CLUTTER_COGL_HAS_GL
+    &gl_texture_upload_renderer,
 #endif
     NULL
   };
@@ -1765,6 +1923,9 @@ clutter_gst_video_sink_propose_allocation (GstBaseSink * base_sink, GstQuery * q
 
   gst_query_add_allocation_meta (query,
       GST_VIDEO_META_API_TYPE, NULL);
+
+  gst_query_add_allocation_meta (query,
+      GST_VIDEO_GL_TEXTURE_UPLOAD_META_API_TYPE, NULL);
 
   return TRUE;
 }
