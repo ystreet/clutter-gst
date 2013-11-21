@@ -833,10 +833,13 @@ clutter_gst_rgb24_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
   if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
     goto map_fail;
 
-  tex = cogl_texture_new_from_data (priv->info.width,
-      priv->info.height,
+  tex = cogl_texture_new_from_data (GST_VIDEO_FRAME_COMP_WIDTH (&frame, 0),
+      GST_VIDEO_FRAME_COMP_HEIGHT (&frame, 0),
       CLUTTER_GST_TEXTURE_FLAGS,
-      format, format, priv->info.stride[0], frame.data[0]);
+      format,
+      format,
+      GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 0),
+      GST_VIDEO_FRAME_PLANE_DATA (&frame, 0));
 
   gst_video_frame_unmap (&frame);
 
@@ -882,10 +885,13 @@ clutter_gst_rgb32_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
   else
     format = COGL_PIXEL_FORMAT_RGBA_8888;
 
-  tex = cogl_texture_new_from_data (priv->info.width,
-      priv->info.height,
+  tex = cogl_texture_new_from_data (GST_VIDEO_FRAME_COMP_WIDTH (&frame, 0),
+      GST_VIDEO_FRAME_COMP_HEIGHT (&frame, 0),
       CLUTTER_GST_TEXTURE_FLAGS,
-      format, format, priv->info.stride[0], frame.data[0]);
+      format,
+      format,
+      GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 0),
+      GST_VIDEO_FRAME_PLANE_DATA (&frame, 0));
 
   gst_video_frame_unmap (&frame);
 
@@ -920,34 +926,28 @@ static ClutterGstRenderer rgb32_renderer = {
 static gboolean
 clutter_gst_yv12_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
 {
-  ClutterGstVideoSinkPrivate *priv = sink->priv;
-  CoglHandle y_tex, u_tex, v_tex;
+  int i;
+  CoglHandle texs[3];
   GstVideoFrame frame;
+  ClutterGstVideoSinkPrivate *priv = sink->priv;
 
   if (!gst_video_frame_map (&frame, &priv->info, buffer, GST_MAP_READ))
     goto no_map;
 
-  y_tex =
-      cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 0),
-      GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 0), CLUTTER_GST_TEXTURE_FLAGS,
-      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[0],
-      frame.data[0]);
-
-  u_tex =
-      cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 1),
-      GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 1), CLUTTER_GST_TEXTURE_FLAGS,
-      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[1],
-      frame.data[1]);
-
-  v_tex =
-      cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 2),
-      GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 2), CLUTTER_GST_TEXTURE_FLAGS,
-      COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[2],
-      frame.data[2]);
+  for (i = 0; i < 3; i++) {
+    texs[i] =
+      cogl_texture_new_from_data (GST_VIDEO_FRAME_COMP_WIDTH (&frame, i),
+      GST_VIDEO_FRAME_COMP_HEIGHT (&frame, i),
+      CLUTTER_GST_TEXTURE_FLAGS,
+      COGL_PIXEL_FORMAT_G_8,
+      COGL_PIXEL_FORMAT_G_8,
+      GST_VIDEO_FRAME_PLANE_STRIDE (&frame, i),
+      GST_VIDEO_FRAME_PLANE_DATA (&frame, i));
+  }
 
   gst_video_frame_unmap (&frame);
 
-  _create_paint_material (sink, y_tex, u_tex, v_tex);
+  _create_paint_material (sink, texs[0], texs[1], texs[2]);
 
   return TRUE;
 
@@ -994,16 +994,22 @@ clutter_gst_nv12_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
     goto no_map;
 
   y_tex =
-    cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 0),
-    GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 0), CLUTTER_GST_TEXTURE_FLAGS,
-    COGL_PIXEL_FORMAT_G_8, COGL_PIXEL_FORMAT_G_8, priv->info.stride[0],
-    frame.data[0]);
+    cogl_texture_new_from_data (GST_VIDEO_FRAME_COMP_WIDTH (&frame, 0),
+    GST_VIDEO_FRAME_COMP_HEIGHT (&frame, 0),
+    CLUTTER_GST_TEXTURE_FLAGS,
+    COGL_PIXEL_FORMAT_G_8,
+    COGL_PIXEL_FORMAT_G_8,
+    GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 0),
+    GST_VIDEO_FRAME_PLANE_DATA (&frame, 0));
 
   u_tex =
-    cogl_texture_new_from_data (GST_VIDEO_INFO_COMP_WIDTH (&priv->info, 1),
-    GST_VIDEO_INFO_COMP_HEIGHT (&priv->info, 1), CLUTTER_GST_TEXTURE_FLAGS,
-    COGL_PIXEL_FORMAT_RGB_565, COGL_PIXEL_FORMAT_RGB_565, priv->info.stride[1],
-    frame.data[1]);
+    cogl_texture_new_from_data (GST_VIDEO_FRAME_COMP_WIDTH (&frame, 1),
+    GST_VIDEO_FRAME_COMP_HEIGHT (&frame, 1),
+    CLUTTER_GST_TEXTURE_FLAGS,
+    COGL_PIXEL_FORMAT_RGB_565,
+    COGL_PIXEL_FORMAT_RGB_565,
+    GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 1),
+    GST_VIDEO_FRAME_PLANE_DATA (&frame, 1));
 
   gst_video_frame_unmap (&frame);
 
@@ -1154,11 +1160,13 @@ clutter_gst_ayuv_upload (ClutterGstVideoSink * sink, GstBuffer * buffer)
     goto map_fail;
 
   tex =
-      cogl_texture_new_from_data (priv->info.width,
-      priv->info.height,
+      cogl_texture_new_from_data (GST_VIDEO_FRAME_COMP_WIDTH (&frame, 0),
+      GST_VIDEO_FRAME_COMP_HEIGHT (&frame, 0),
       CLUTTER_GST_TEXTURE_FLAGS,
       COGL_PIXEL_FORMAT_RGBA_8888,
-      COGL_PIXEL_FORMAT_RGBA_8888, priv->info.stride[0], frame.data[0]);
+      COGL_PIXEL_FORMAT_RGBA_8888,
+      GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 0),
+      GST_VIDEO_FRAME_PLANE_DATA (&frame, 0));
 
   gst_video_frame_unmap (&frame);
 
@@ -1737,6 +1745,20 @@ clutter_gst_video_sink_stop (GstBaseSink * base_sink)
   return TRUE;
 }
 
+static gboolean
+clutter_gst_video_sink_propose_allocation (GstBaseSink * base_sink, GstQuery * query)
+{
+  gboolean need_pool = FALSE;
+  GstCaps * caps = NULL;
+
+  gst_query_parse_allocation (query, &caps, &need_pool);
+
+  gst_query_add_allocation_meta (query,
+      GST_VIDEO_META_API_TYPE, NULL);
+
+  return TRUE;
+}
+
 static void
 clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass * klass)
 {
@@ -1772,6 +1794,7 @@ clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass * klass)
   gstbase_sink_class->stop = clutter_gst_video_sink_stop;
   gstbase_sink_class->set_caps = clutter_gst_video_sink_set_caps;
   gstbase_sink_class->get_caps = clutter_gst_video_sink_get_caps;
+  gstbase_sink_class->propose_allocation = clutter_gst_video_sink_propose_allocation;
 
   /**
    * ClutterGstVideoSink:texture:
