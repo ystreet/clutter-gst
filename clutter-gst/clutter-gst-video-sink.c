@@ -250,6 +250,10 @@ struct _ClutterGstVideoSinkPrivate
 
   GArray *signal_handler_ids;
 
+  GstVideoCropMeta crop_meta;
+  gboolean has_crop_meta;
+  gboolean crop_meta_has_changed;
+
 #ifdef HAVE_HW_DECODER_SUPPORT
   GstSurfaceConverter *converter;
 
@@ -513,6 +517,7 @@ static gboolean
 clutter_gst_source_dispatch (GSource * source,
     GSourceFunc callback, gpointer user_data)
 {
+  GstVideoCropMeta *crop_meta;
   GstVideoGLTextureUploadMeta *upload_meta;
   ClutterGstSource *gst_source = (ClutterGstSource *) source;
   ClutterGstVideoSinkPrivate *priv = gst_source->sink->priv;
@@ -534,6 +539,24 @@ clutter_gst_source_dispatch (GSource * source,
     gst_source->has_gl_texture_upload_meta = TRUE;
   }
 #endif
+
+  crop_meta = gst_buffer_get_video_crop_meta (gst_source->buffer);
+  if (crop_meta) {
+    priv->has_crop_meta = TRUE;
+
+    if (priv->crop_meta.x      == crop_meta->x     &&
+        priv->crop_meta.y      == crop_meta->y     &&
+        priv->crop_meta.width  == crop_meta->width &&
+        priv->crop_meta.height == crop_meta->height) {
+      priv->crop_meta_has_changed = FALSE;
+    } else {
+      priv->crop_meta.x = crop_meta->x;
+      priv->crop_meta.y = crop_meta->y;
+      priv->crop_meta.width = crop_meta->width;
+      priv->crop_meta.height = crop_meta->height;
+      priv->crop_meta_has_changed = TRUE;
+    }
+  }
 
   if (G_UNLIKELY (gst_source->has_new_caps)) {
     GstCaps *caps =
@@ -574,7 +597,12 @@ clutter_gst_source_dispatch (GSource * source,
       /* FIXME : We already call this above ? */
       if (!clutter_gst_parse_caps (caps, gst_source->sink, TRUE))
         goto negotiation_fail;
-      clutter_actor_set_size (stage, priv->info.width, priv->info.height);
+
+      if (priv->has_crop_meta)
+        clutter_actor_set_size (stage,
+            priv->crop_meta.width, priv->crop_meta.height);
+      else
+        clutter_actor_set_size (stage, priv->info.width, priv->info.height);
       clutter_actor_show (stage);
     } else {
       /* FIXME : We already call this above ? */
@@ -1427,17 +1455,23 @@ static gboolean
 clutter_gst_gl_texture_upload_init_texture (ClutterGstVideoSink * sink)
 {
   CoglHandle material;
-  CoglTexture *tex = NULL;
+  CoglTexture *tex = NULL, *crop_tex = NULL;
   ClutterGstVideoSinkPrivate *priv = sink->priv;
+  GstVideoCropMeta *crop_meta = &priv->crop_meta;
   ClutterGstRenderer *renderer = sink->priv->renderer;
   GLTextureUploadRendererContext *context = renderer->context;
 
-  tex = cogl_texture_new_with_size (priv->info.width, priv->info.height,
-      CLUTTER_GST_TEXTURE_FLAGS, COGL_PIXEL_FORMAT_RGBA_8888);
+  tex = cogl_texture_new_with_size (priv->info.width,
+      priv->info.height, CLUTTER_GST_TEXTURE_FLAGS, COGL_PIXEL_FORMAT_RGBA_8888);
 
   if (!tex) {
     GST_WARNING ("Couldn't create cogl texture");
     return FALSE;
+  }
+
+  if (priv->has_crop_meta) {
+    crop_tex = cogl_texture_new_from_sub_texture (tex, crop_meta->x,
+        crop_meta->y, crop_meta->width, crop_meta->height);
   }
 
   material = cogl_material_new ();
@@ -1445,10 +1479,17 @@ clutter_gst_gl_texture_upload_init_texture (ClutterGstVideoSink * sink)
     GST_WARNING ("Couldn't create cogl material");
     return FALSE;
   }
-  cogl_material_set_layer (material, 0, tex);
+
+  if (priv->has_crop_meta)
+    cogl_material_set_layer (material, 0, crop_tex);
+  else
+    cogl_material_set_layer (material, 0, tex);
+
   clutter_texture_set_cogl_material (priv->texture, material);
 
   cogl_object_unref (tex);
+  if (crop_tex)
+    cogl_object_unref (crop_tex);
   cogl_object_unref (material);
 
   context->is_initialized = TRUE;
@@ -1470,7 +1511,7 @@ clutter_gst_gl_texture_upload_upload (ClutterGstVideoSink * sink, GstBuffer * bu
     return FALSE;
   }
 
-  if (!context->is_initialized) {
+  if (!context->is_initialized || priv->crop_meta_has_changed) {
     gboolean ret = clutter_gst_gl_texture_upload_init_texture (sink);
     if (!ret)
       return ret;
