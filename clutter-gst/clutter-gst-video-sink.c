@@ -211,6 +211,7 @@ typedef struct _ClutterGstRenderer
   ClutterGstVideoFormat format; /* the format handled by this renderer */
   int flags;                    /* ClutterGstFeatures ORed flags */
   GstStaticCaps caps;           /* caps handled by the renderer */
+  gpointer context;             /* rendering context if any */
 
   void (*init) (ClutterGstVideoSink * sink);
   void (*deinit) (ClutterGstVideoSink * sink);
@@ -860,6 +861,7 @@ static ClutterGstRenderer rgb24_renderer = {
   CLUTTER_GST_RGB24,
   0,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB, BGR }")),
+  NULL,
   clutter_gst_rgb_init,
   clutter_gst_dummy_deinit,
   clutter_gst_rgb24_upload,
@@ -912,6 +914,7 @@ static ClutterGstRenderer rgb32_renderer = {
   CLUTTER_GST_RGB32,
   0,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGBA, BGRA }")),
+  NULL,
   clutter_gst_rgb_init,
   clutter_gst_dummy_deinit,
   clutter_gst_rgb32_upload,
@@ -971,6 +974,7 @@ static ClutterGstRenderer yv12_glsl_renderer = {
   CLUTTER_GST_YV12,
   CLUTTER_GST_GLSL | CLUTTER_GST_MULTI_TEXTURE,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("YV12")),
+  NULL,
   clutter_gst_yv12_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -1048,6 +1052,7 @@ static ClutterGstRenderer nv12_glsl_renderer = {
   CLUTTER_GST_NV12,
   CLUTTER_GST_GLSL | CLUTTER_GST_MULTI_TEXTURE,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("NV12")),
+  NULL,
   clutter_gst_nv12_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_nv12_upload,
@@ -1076,6 +1081,7 @@ static ClutterGstRenderer yv12_fp_renderer = {
   CLUTTER_GST_YV12,
   CLUTTER_GST_FP | CLUTTER_GST_MULTI_TEXTURE,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("YV12")),
+  NULL,
   clutter_gst_yv12_fp_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -1100,6 +1106,7 @@ static ClutterGstRenderer i420_glsl_renderer = {
   CLUTTER_GST_I420,
   CLUTTER_GST_GLSL | CLUTTER_GST_MULTI_TEXTURE,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("I420")),
+  NULL,
   clutter_gst_i420_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -1129,6 +1136,7 @@ static ClutterGstRenderer i420_fp_renderer = {
   CLUTTER_GST_I420,
   CLUTTER_GST_FP | CLUTTER_GST_MULTI_TEXTURE,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("I420")),
+  NULL,
   clutter_gst_i420_fp_init,
   clutter_gst_dummy_deinit,
   clutter_gst_yv12_upload,
@@ -1187,6 +1195,7 @@ static ClutterGstRenderer ayuv_glsl_renderer = {
   CLUTTER_GST_AYUV,
   CLUTTER_GST_GLSL,
   GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("AYUV")),
+  NULL,
   clutter_gst_ayuv_glsl_init,
   clutter_gst_dummy_deinit,
   clutter_gst_ayuv_upload,
@@ -1348,6 +1357,7 @@ static ClutterGstRenderer hw_renderer = {
   CLUTTER_GST_SURFACE,
   0,
   GST_STATIC_CAPS ("video/x-surface, opengl=true"),
+  NULL,
   clutter_gst_hw_init,
   clutter_gst_hw_deinit,
   clutter_gst_hw_upload,
