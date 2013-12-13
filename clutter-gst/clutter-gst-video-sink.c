@@ -683,6 +683,28 @@ _create_cogl_program (const char *source)
   return program;
 }
 
+static CoglHandle
+_get_cached_cogl_program (const char *source)
+{
+  static GHashTable *program_cache = NULL;
+  CoglHandle handle;
+
+  if (G_UNLIKELY (program_cache == NULL)) {
+    program_cache = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                           NULL, (GDestroyNotify) cogl_handle_unref);
+  }
+
+  handle = (CoglHandle) g_hash_table_lookup (program_cache, (gpointer) source);
+  if (handle == COGL_INVALID_HANDLE) {
+    handle = _create_cogl_program (source);
+    g_hash_table_insert (program_cache,
+                         (gpointer) source,
+                         (gpointer) cogl_handle_ref (handle));
+  }
+
+  return handle;
+}
+
 static void
 _create_template_material (ClutterGstVideoSink * sink,
     const char *source, gboolean set_uniforms, int n_layers)
@@ -697,7 +719,7 @@ _create_template_material (ClutterGstVideoSink * sink,
   template = cogl_material_new ();
 
   if (source) {
-    CoglHandle program = _create_cogl_program (source);
+    CoglHandle program = _get_cached_cogl_program (source);
 
     if (set_uniforms) {
       unsigned int location;
