@@ -742,7 +742,6 @@ _create_template_material (ClutterGstVideoSink * sink,
     }
 
     cogl_material_set_user_program (template, program);
-    cogl_handle_unref (program);
   }
 
   for (i = 0; i < n_layers; i++)
@@ -1488,6 +1487,11 @@ clutter_gst_video_sink_dispose (GObject * object)
 
   self = CLUTTER_GST_VIDEO_SINK (object);
   priv = self->priv;
+
+  if (priv->material_template != COGL_INVALID_HANDLE) {
+    cogl_object_unref (priv->material_template);
+    priv->material_template = COGL_INVALID_HANDLE;
+  }
 
   if (priv->renderer) {
     priv->renderer->deinit (self);
