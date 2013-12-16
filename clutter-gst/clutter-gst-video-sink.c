@@ -691,14 +691,15 @@ _get_cached_cogl_program (const char *source)
 
   if (G_UNLIKELY (program_cache == NULL)) {
     program_cache = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                           NULL, (GDestroyNotify) cogl_handle_unref);
+                                           (GDestroyNotify) g_free,
+                                           (GDestroyNotify) cogl_handle_unref);
   }
 
   handle = (CoglHandle) g_hash_table_lookup (program_cache, (gpointer) source);
   if (handle == COGL_INVALID_HANDLE) {
     handle = _create_cogl_program (source);
     g_hash_table_insert (program_cache,
-                         (gpointer) source,
+                         (gpointer) g_strdup (source),
                          (gpointer) cogl_handle_ref (handle));
   }
 
