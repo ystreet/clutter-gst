@@ -1,3 +1,24 @@
+clutter-gst 2.0.10 (10/01/2014)
+===============================================================================
+
+List of changes since 2.0.8
+
+ o Add NV12 support
+
+ o Add GL upload meta API support
+
+ o Add video crop meta API support
+
+ o Add local shader cache to avoid leak
+
+ o Fix memory leak in accept_caps() method
+
+Many Thanks to:
+
+    Matthieu Bouron
+    David King
+    Edward Hervey
+
 clutter-gst 2.0.8 (18/09/2013)
 ===============================================================================
 
