@@ -14,35 +14,35 @@ INCLUDES = -I$(top_srcdir)      \
 
 test_alpha_SOURCES = test-alpha.c
 test_alpha_CFLAGS  = $(CLUTTER_GST_CFLAGS) $(GST_CFLAGS)
-test_alpha_LDFLAGS =		\
+test_alpha_LDADD =		\
 	$(CLUTTER_GST_LIBS)	\
 	$(GST_LIBS)		\
 	$(top_builddir)/clutter-gst/libclutter-gst-@CLUTTER_GST_MAJORMINOR@.la
 
 test_rgb_upload_SOURCES = test-rgb-upload.c
 test_rgb_upload_CFLAGS  = $(CLUTTER_GST_CFLAGS) $(GST_CFLAGS)
-test_rgb_upload_LDFLAGS =	\
+test_rgb_upload_LDADD =	\
 	$(CLUTTER_GST_LIBS)	\
 	$(GST_LIBS)		\
 	$(top_builddir)/clutter-gst/libclutter-gst-@CLUTTER_GST_MAJORMINOR@.la
 
 test_start_stop_SOURCES = test-start-stop.c
 test_start_stop_CFLAGS  = $(CLUTTER_GST_CFLAGS) $(GST_CFLAGS)
-test_start_stop_LDFLAGS =	\
+test_start_stop_LDADD =	\
 	$(CLUTTER_GST_LIBS)	\
 	$(GST_LIBS)		\
 	$(top_builddir)/clutter-gst/libclutter-gst-@CLUTTER_GST_MAJORMINOR@.la
 
 test_yuv_upload_SOURCES = test-yuv-upload.c
 test_yuv_upload_CFLAGS  = $(CLUTTER_GST_CFLAGS) $(GST_CFLAGS)
-test_yuv_upload_LDFLAGS =	\
+test_yuv_upload_LDADD =	\
 	$(CLUTTER_GST_LIBS)	\
 	$(GST_LIBS)		\
 	$(top_builddir)/clutter-gst/libclutter-gst-@CLUTTER_GST_MAJORMINOR@.la
 
 test_video_texture_new_unref_loop_SOURCES = test-video-texture-new-unref-loop.c
 test_video_texture_new_unref_loop_CFLAGS  = $(CLUTTER_GST_CFLAGS) $(GST_CFLAGS)
-test_video_texture_new_unref_loop_LDFLAGS =	\
+test_video_texture_new_unref_loop_LDADD =	\
 	$(CLUTTER_GST_LIBS)			\
 	$(GST_LIBS)				\
 	$(top_builddir)/clutter-gst/libclutter-gst-@CLUTTER_GST_MAJORMINOR@.la
