@@ -2,9 +2,9 @@ NULL = #
 
 noinst_PROGRAMS = video-player video-sink video-sink-navigation
 
-INCLUDES = -I$(top_srcdir) \
-	   $(MAINTAINER_CFLAGS) \
-	   $(NULL)
+AM_CPPFLAGS = -I$(top_srcdir) \
+		$(MAINTAINER_CFLAGS) \
+		$(NULL)
 
 video_player_SOURCES = video-player.c
 video_player_CFLAGS = $(CLUTTER_GST_CFLAGS) $(GST_CFLAGS)
