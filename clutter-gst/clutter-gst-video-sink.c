@@ -62,6 +62,10 @@
 #ifdef CLUTTER_WINDOWING_X11
 #include <cogl/cogl-texture-pixmap-x11.h>
 #include <clutter/x11/clutter-x11.h>
+#if COGL_HAS_GLX_SUPPORT
+#include <cogl/cogl-xlib.h>
+#include <cogl/cogl-glx.h>
+#endif
 #endif
 
 #ifdef HAVE_HW_DECODER_SUPPORT
@@ -253,6 +257,8 @@ struct _ClutterGstVideoSinkPrivate
   GstVideoCropMeta crop_meta;
   gboolean has_crop_meta;
   gboolean crop_meta_has_changed;
+
+  GstContext *context;
 
 #ifdef HAVE_HW_DECODER_SUPPORT
   GstSurfaceConverter *converter;
@@ -1954,19 +1960,141 @@ clutter_gst_video_sink_stop (GstBaseSink * base_sink)
   return TRUE;
 }
 
+static inline CoglRenderer *
+_clutter_gst_get_cogl_renderer (ClutterGstVideoSink *sink)
+{
+  ClutterBackend *backend;
+  CoglContext *context;
+  CoglDisplay *display;
+
+  backend = clutter_get_default_backend ();
+  context = clutter_backend_get_cogl_context (backend);
+  display = cogl_context_get_display (context);
+  return cogl_display_get_renderer (display);
+}
+
+static inline CoglWinsysID
+_clutter_gst_get_winsys_id (ClutterGstVideoSink *sink)
+{
+  CoglRenderer *renderer = _clutter_gst_get_cogl_renderer (sink);
+
+  return cogl_renderer_get_winsys_id (renderer);
+}
+
+static gboolean
+_clutter_gst_handle_context_query (GstElement * element, GstQuery * query,
+    GstContext ** context_ptr)
+{
+  ClutterGstVideoSink *sink;
+  gboolean res = FALSE;
+  const gchar *context_type;
+  GstContext *context, *old_context;
+  CoglWinsysID winsys_id;
+
+  g_return_val_if_fail (element != NULL, FALSE);
+  g_return_val_if_fail (query != NULL, FALSE);
+  g_return_val_if_fail (context_ptr != NULL, FALSE);
+
+  sink = CLUTTER_GST_VIDEO_SINK (element);
+  winsys_id = _clutter_gst_get_winsys_id (sink);
+  gst_query_parse_context_type (query, &context_type);
+
+  GST_ERROR ("context query, %s, %u, %u", context_type, winsys_id, COGL_WINSYS_ID_GLX);
+
+#ifdef COGL_HAS_GLX_SUPPORT
+  if (g_strcmp0 (context_type, "gst.x11.display.handle") == 0 && winsys_id == COGL_WINSYS_ID_GLX) {
+    GstStructure *s;
+    Display *x11_display = NULL;
+    CoglRenderer *renderer;
+
+    gst_query_parse_context (query, &old_context);
+
+    if (old_context)
+      context = gst_context_copy (old_context);
+    else
+      context = gst_context_new ("gst.x11.display.handle", TRUE);
+
+    renderer = _clutter_gst_get_cogl_renderer (sink);
+    x11_display = cogl_xlib_renderer_get_display(renderer);
+
+    GST_INFO_OBJECT (sink, "returning x11 display (%p) to context query", x11_display);
+
+    s = gst_context_writable_structure (context);
+    gst_structure_set (s, "display", G_TYPE_POINTER, x11_display, NULL);
+
+    gst_query_set_context (query, context);
+    gst_context_unref (context);
+
+    res = x11_display != NULL;
+  }
+#endif
+
+  return res;
+}
+
+static gboolean
+clutter_gst_video_sink_query (GstBaseSink * bsink, GstQuery * query)
+{
+  ClutterGstVideoSink *sink = CLUTTER_GST_VIDEO_SINK (bsink);
+  gboolean res = FALSE;
+
+  switch (GST_QUERY_TYPE (query)) {
+    case GST_QUERY_CONTEXT:
+    {
+      return _clutter_gst_handle_context_query ((GstElement *) sink, query,
+          &sink->priv->context);
+      break;
+    }
+    default:
+      res = GST_BASE_SINK_CLASS (parent_class)->query (bsink, query);
+      break;
+  }
+
+  return res;
+}
+
+static gpointer
+_clutter_gst_get_gl_context_handle (ClutterGstVideoSink *sink)
+{
+  ClutterBackend *backend;
+  CoglContext *context;
+  CoglWinsysID gl_platform;
+  gpointer handle = NULL;
+
+  backend = clutter_get_default_backend ();
+  context = clutter_backend_get_cogl_context (backend);
+
+  gl_platform = _clutter_gst_get_winsys_id (sink);
+#if COGL_HAS_GLX_SUPPORT
+  if (gl_platform == COGL_WINSYS_ID_GLX) {
+    handle = cogl_glx_context_get_glx_context (context);
+  }
+#endif
+  return handle;
+}
+
 static gboolean
 clutter_gst_video_sink_propose_allocation (GstBaseSink * base_sink, GstQuery * query)
 {
   gboolean need_pool = FALSE;
   GstCaps * caps = NULL;
+  GstStructure *gl_context;
+  gpointer handle;
 
   gst_query_parse_allocation (query, &caps, &need_pool);
 
   gst_query_add_allocation_meta (query,
       GST_VIDEO_META_API_TYPE, NULL);
 
+  handle = _clutter_gst_get_gl_context_handle (CLUTTER_GST_VIDEO_SINK (base_sink));
+  gl_context = gst_structure_new ("GstVideoGLTextureUploadMeta", "gst.gl.context.handle",
+      G_TYPE_POINTER, handle, "gst.gl.context.type", G_TYPE_STRING, "glx", "gst.gl.context.apis", G_TYPE_STRING, "opengl", NULL);
+  GST_ERROR ("sent handle 0x%p", handle);
+
   gst_query_add_allocation_meta (query,
-      GST_VIDEO_GL_TEXTURE_UPLOAD_META_API_TYPE, NULL);
+      GST_VIDEO_GL_TEXTURE_UPLOAD_META_API_TYPE, gl_context);
+
+  gst_structure_free (gl_context);
 
   return TRUE;
 }
@@ -2007,6 +2135,7 @@ clutter_gst_video_sink_class_init (ClutterGstVideoSinkClass * klass)
   gstbase_sink_class->set_caps = clutter_gst_video_sink_set_caps;
   gstbase_sink_class->get_caps = clutter_gst_video_sink_get_caps;
   gstbase_sink_class->propose_allocation = clutter_gst_video_sink_propose_allocation;
+  gstbase_sink_class->query = clutter_gst_video_sink_query;
 
   /**
    * ClutterGstVideoSink:texture:
